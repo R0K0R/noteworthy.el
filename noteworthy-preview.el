@@ -13,31 +13,21 @@ Uses xwidget if available, otherwise falls back to default external browser."
   "Return t if xwidget preview is available."
   (featurep 'xwidget-internal))
 
-;; Force xwidget to open in a right side window if using xwidgets
 (defun noteworthy-xwidget-in-side-window (orig-fun &rest args)
   "Advice to make xwidget-webkit open in a right side window."
   (let ((current-window (selected-window)))
-    ;; Create or get the right side window
-    (let* ((side-window (or (window-with-parameter 'noteworthy-preview t)
-                            ;; Fallback only if no tagged window exists
-                            (split-window (frame-root-window) 
-                                          (floor (* 0.25 (frame-width)))
-                                          'right)))
-           (current-width (window-total-width side-window)))
-      
-      ;; Ensure window parameter is set
+    (let ((side-window (or (window-with-parameter 'noteworthy-preview t)
+                           (split-window (frame-root-window)
+                                         (floor (* 0.25 (frame-width)))
+                                         'right))))
       (set-window-parameter side-window 'noteworthy-preview t)
-      
       (select-window side-window)
       (apply orig-fun args)
-      
-      ;; Re-dedicate and return check
       (set-window-dedicated-p side-window t)
       (select-window current-window))))
 
 (advice-add 'xwidget-webkit-browse-url :around #'noteworthy-xwidget-in-side-window)
 
-;; Fix hyperlinks opening in preview window - advise find-file to use editor window
 (defvar noteworthy--editor-window nil
   "Reference to the main editor window.")
 
@@ -59,35 +49,23 @@ Uses xwidget if available, otherwise falls back to default external browser."
 
 (advice-add 'find-file :around #'noteworthy-find-file-in-editor)
 
-;; Override typst-preview's jump function to solve duplicate buffer issues completely
 (advice-add 'typst-preview--goto-file-position :override
             (lambda (file-name position)
               "Jump to position in FILE-NAME, reusing existing buffers/windows."
               (let* ((true-path (file-truename file-name))
-                     ;; Robustly find existing buffer by checking truename of all buffers
                      (buffer (cl-find-if (lambda (b)
-                                           (when-let ((bfn (buffer-file-name b)))
+                                           (when-let* ((bfn (buffer-file-name b)))
                                              (string= (file-truename bfn) true-path)))
                                          (buffer-list))))
-                
-                ;; 1. Ensure we have the buffer
                 (unless buffer
                   (setq buffer (find-file-noselect true-path)))
-                
-                ;; 2. Select the correct window to display it in
                 (let ((editor-win (or (cl-find-if (lambda (w) (window-parameter w 'noteworthy-editor))
                                                   (window-list))
-                                      ;; Fallback: Try to use the largest window that isn't the preview
                                       (get-largest-window))))
                   (if (and editor-win (window-live-p editor-win))
                       (select-window editor-win)
-                    ;; Fallback: just use selected
                     nil))
-                
-                ;; 3. Switch to buffer in the confirmed window
                 (switch-to-buffer buffer)
-                
-                ;; 4. Move point
                 (goto-char (point-min))
                 (let ((line (if (vectorp position) (aref position 0) (car position)))
                       (col (if (vectorp position) (aref position 1) (cadr position))))
@@ -95,7 +73,6 @@ Uses xwidget if available, otherwise falls back to default external browser."
                   (forward-char col))
                 (recenter))))
 
-;; Safe Websocket parsing
 (defun noteworthy-safe-parse-message (orig-fun sock frame)
    "Advice to safely handle websocket messages, catching any errors."
    (condition-case err
@@ -104,7 +81,33 @@ Uses xwidget if available, otherwise falls back to default external browser."
 
 (advice-add 'typst-preview--parse-message :around #'noteworthy-safe-parse-message)
 
-;; Configure browser on load
+(defun noteworthy-typst-send-position ()
+  "Send current position to typst preview (jump to source).
+Safe version that works for both master and included files."
+  (interactive)
+  (condition-case err
+      (cond
+       ((and (boundp 'typst-preview--local-master)
+             typst-preview--local-master
+             (fboundp 'typst-preview--master-socket)
+             (typst-preview--master-socket typst-preview--local-master))
+        (typst-preview-send-position)
+        (message "Sent position to local master."))
+       ((and (boundp 'typst-preview--active-masters)
+             typst-preview--active-masters)
+        (let* ((master (car typst-preview--active-masters))
+               (socket (typst-preview--master-socket master)))
+          (if socket
+              (let ((msg (json-encode `(("event" . "panelScrollTo")
+                                        ("filepath" . ,(file-truename buffer-file-name))
+                                        ("line" . ,(1- (line-number-at-pos)))
+                                        ("character" . ,(max 1 (current-column)))))))
+                (websocket-send-text socket msg)
+                (message "Sent position to global typst session"))
+            (message "Found active master but no socket connected"))))
+       (t (message "No active typst-preview session to send position to")))
+    (error (message "typst-preview error: %s" (error-message-string err)))))
+
 (noteworthy-preview-browser-setup)
 
 (provide 'noteworthy-preview)
