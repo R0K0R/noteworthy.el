@@ -7,7 +7,8 @@
 ;; URL: https://github.com/R0K0R/noteworthy.el
 
 ;;; Commentary:
-;; A specialized workflow for technical writing in Typst.
+;; Emacs editing environment for the Noteworthy academic framework for Typst.
+;; See: https://github.com/sihooleebd/noteworthy
 
 ;;; Code:
 
@@ -21,6 +22,11 @@
 If nil, defaults to bash or $SHELL."
   :type '(choice (const :tag "Default" nil)
                  (file :tag "Shell path")))
+
+(defcustom noteworthy-pdf-width nil
+  "Width of the PDF window in columns.
+If nil, defaults to 35% of the frame width."
+  :type '(choice (const :tag "Dynamic (35%)" nil) integer))
 
 (require 'noteworthy-typst)
 (require 'noteworthy-preview)

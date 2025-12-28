@@ -6,8 +6,8 @@
   "Configure preview browser based on system capabilities.
 Uses xwidget if available, otherwise falls back to default external browser."
   (if (featurep 'xwidget-internal)
-      (setq typst-preview-browser 'xwidget)
-    (setq typst-preview-browser 'default)))
+      (setq typst-preview-browser "xwidget")
+    (setq typst-preview-browser "default")))
 
 (defun noteworthy-xwidget-available-p ()
   "Return t if xwidget preview is available."
@@ -16,11 +16,16 @@ Uses xwidget if available, otherwise falls back to default external browser."
 (defun noteworthy-xwidget-in-side-window (orig-fun &rest args)
   "Advice to make xwidget-webkit open in a right side window."
   (let ((current-window (selected-window)))
-    (let ((side-window (or (window-with-parameter 'noteworthy-preview t)
-                           (split-window (frame-root-window)
-                                         (floor (* 0.25 (frame-width)))
-                                         'right))))
+    (let* ((side-window (or (window-with-parameter 'noteworthy-preview t)
+                            (split-window (frame-root-window) nil 'right)))
+           (target-width (if (and (boundp 'noteworthy-preview-width) noteworthy-preview-width)
+                             noteworthy-preview-width
+                           (round (* 0.35 (frame-width)))))
+           (current-width (window-total-width side-window))
+           (delta (- target-width current-width)))
       (set-window-parameter side-window 'noteworthy-preview t)
+      (when (/= delta 0)
+        (ignore-errors (window-resize side-window delta t)))
       (select-window side-window)
       (apply orig-fun args)
       (set-window-dedicated-p side-window t)

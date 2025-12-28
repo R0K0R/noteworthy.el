@@ -1,8 +1,8 @@
-# Noteworthy
+# noteworthy.el
 
-A specialized Emacs workflow for technical writing in [Typst](https://typst.app/).
+An Emacs editing environment for the [Noteworthy](https://github.com/sihooleebd/noteworthy) academic framework for [Typst](https://typst.app/).
 
-Noteworthy provides smart editing features, automated workspace layout, and seamless preview integration for a distraction-free writing experience.
+This package provides smart editing features, automated workspace layout, and seamless preview integration tailored for developing Noteworthy projects — a powerful Typst framework for creating educational textbooks, lecture notes, and technical documentation.
 
 ## Features
 
@@ -60,7 +60,7 @@ Noteworthy provides smart editing features, automated workspace layout, and seam
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/noteworthy.git ~/.emacs.d/site-lisp/noteworthy
+   git clone https://github.com/R0K0R/noteworthy.git ~/.emacs.d/site-lisp/noteworthy
    ```
 
 2. Add to your `init.el`:
@@ -132,7 +132,8 @@ Contributions are welcome! Please open an issue or pull request.
 
 GPL-3.0-or-later
 
-## Acknowledgments
+## Related
 
-- [typst-ts-mode](https://codeberg.org/meow_king/typst-ts-mode) by meow_king
-- [typst-preview.el](https://github.com/havarddj/typst-preview.el) by havarddj
+- [Noteworthy](https://github.com/sihooleebd/noteworthy) — The Typst framework this editor is built for
+- [typst-ts-mode](https://codeberg.org/meow_king/typst-ts-mode) — Tree-sitter mode for Typst
+- [typst-preview.el](https://github.com/havarddj/typst-preview.el) — Live preview for Typst
