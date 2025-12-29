@@ -120,25 +120,30 @@ Traverses up the AST:
     (backward-char 1)))
 
 (defun noteworthy-typst-smart-backtick ()
-  "Smart backtick with 1-2-3-Skip logic for code blocks."
+  "Smart backtick with 1-2-3 logic for code blocks."
   (interactive)
   (cond
+   ;; Escape if not markup
    ((not (noteworthy-typst-markup-context-p))
     (insert "`"))
-   ((and (eq (char-after) ?`)
-         (eq (char-after (1+ (point))) ?`)
-         (eq (char-after (+ (point) 2)) ?`))
-    (forward-char 3))
-   ((eq (char-after) ?`)
-    (forward-char 1))
+   
+   ;; Case 1: Before two backticks (``|) -> Insert 3rd and Expand
    ((and (eq (char-before) ?`)
          (eq (char-before (1- (point))) ?`))
     (insert "`")
     (save-excursion
-      (insert "\n```")))
+      (insert "\n\n```")
+      (forward-line -1)
+      ;; Optional: Indent inside block if needed, but usually not for raw
+      ))
+
+   ;; Case 2: Before one backtick (`|) -> Insert 2nd
+   ((eq (char-before) ?`)
+    (insert "`"))
+
+   ;; Case 3: Empty or other -> Insert 1st (optionally pair)
    (t
-    (insert "``")
-    (backward-char 1))))
+    (insert "`"))))
 
 (defun noteworthy-typst-smart-backspace ()
   "Delete matching pairs on backspace."

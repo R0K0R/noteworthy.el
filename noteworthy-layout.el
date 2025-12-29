@@ -28,6 +28,9 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
     (setq-default noteworthy-project-root dir)
     (setq noteworthy-project-root dir)
 
+    ;; Load project-specific settings (if any), overriding defaults/globals
+    (noteworthy-load-settings dir)
+
     ;; Find master file
     (let ((master-path
            (let ((parser-path (expand-file-name "templates/parser.typ" dir)))
@@ -51,22 +54,25 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
         (treemacs-add-and-display-current-project-exclusively))
       
       ;; 2. Setup Terminal (Bottom of Editor)
+      ;; 2. Setup Terminal (Bottom of Editor)
       (select-window editor-window)
-      (split-window-below (floor (* 0.75 (window-height))))
-      (other-window 1)
-      (let ((default-directory dir)
-            (shell-cmd (if (and (boundp 'noteworthy-terminal-shell) noteworthy-terminal-shell)
-                           noteworthy-terminal-shell
-                         (or (executable-find "bash") (getenv "SHELL")))))
-        ;; Configure vterm to run our specific command
-        (let ((cmd (if (listp shell-cmd)
-                       (mapconcat #'identity shell-cmd " ")
-                     shell-cmd))
-              (old-shell (if (boundp 'vterm-shell) vterm-shell nil)))
-          (setq vterm-shell cmd)
-          (unwind-protect
-              (vterm)
-            (when old-shell (setq vterm-shell old-shell)))))
+      (let ((term-window (split-window-below (floor (* 0.75 (window-height))))))
+        (select-window term-window)
+        (let ((default-directory dir)
+              (shell-cmd (if (and (boundp 'noteworthy-terminal-shell) noteworthy-terminal-shell)
+                             noteworthy-terminal-shell
+                           (or (executable-find "bash") (getenv "SHELL")))))
+          ;; Configure vterm to run our specific command
+          (let ((cmd (if (listp shell-cmd)
+                         (mapconcat #'identity shell-cmd " ")
+                       shell-cmd))
+                (old-shell (if (boundp 'vterm-shell) vterm-shell nil)))
+            (setq vterm-shell cmd)
+            (unwind-protect
+                (let ((display-buffer-alist nil))
+                  ;; Force vterm to usage current window
+                  (vterm))
+              (when old-shell (setq vterm-shell old-shell))))))
 
       (select-window editor-window)
       
@@ -89,6 +95,12 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
                  (stringp pdf-file)
                  (not (string-empty-p pdf-file))
                  (not (file-directory-p pdf-file)))
+        ;; Ensure pdf-tools is ready
+        (unless (bound-and-true-p pdf-view-mode)
+          (if (fboundp 'pdf-tools-install)
+              (pdf-tools-install)
+            (message "Noteworthy: pdf-tools not found!")))
+        
         (run-with-timer 0.6 nil
                         (lambda (ed-win pdf-f)
                           (when (window-live-p ed-win)
@@ -134,33 +146,51 @@ If nil, defaults to 35% of the frame width.")
 
 (add-hook 'window-size-change-functions #'noteworthy-track-window-sizes)
 
-(defun noteworthy-load-settings ()
-  "Load settings from `noteworthy-settings.el`."
-  (when (file-exists-p noteworthy-settings-file)
-    (with-temp-buffer
-      (insert-file-contents noteworthy-settings-file)
-      (condition-case nil
-          (let ((settings (read (current-buffer))))
-            (when (plist-get settings :pdf-width)
-              (setq noteworthy-pdf-width (plist-get settings :pdf-width)))
-            (when (plist-get settings :preview-width)
-              (setq noteworthy-preview-width (plist-get settings :preview-width))))
-        (error (message "Error loading noteworthy settings"))))))
+(defun noteworthy-load-settings (&optional root)
+  "Load settings from project root or fallback to global `noteworthy-settings.el`."
+  (let* ((root-file (and root (expand-file-name ".noteworthy-layout" root)))
+         (file (if (and root-file (file-exists-p root-file))
+                   root-file
+                 noteworthy-settings-file)))
+    (when (and file (file-exists-p file))
+      (with-temp-buffer
+        (insert-file-contents file)
+        (condition-case nil
+            (let ((settings (read (current-buffer))))
+              (when (plist-get settings :pdf-width)
+                (setq noteworthy-pdf-width (plist-get settings :pdf-width)))
+              (when (plist-get settings :preview-width)
+                (setq noteworthy-preview-width (plist-get settings :preview-width)))
+              (message "Noteworthy: Loaded layout from %s" file))
+          (error (message "Error loading noteworthy settings from %s" file)))))))
 
 (defun noteworthy-save-config ()
-  "Save Noteworthy configuration variables to `noteworthy-settings.el`."
+  "Save Noteworthy configuration variables.
+Saves to BOTH `noteworthy-settings.el` (global fallback)
+AND `.noteworthy-layout` in the project root (if active)."
   (let ((settings (list :preview-width (or noteworthy-preview-width
                                            (round (* 0.35 (frame-width))))
                         :pdf-width (or noteworthy-pdf-width
                                        (round (* 0.35 (frame-width)))))))
+    
+    ;; 1. Save Global Fallback
     (with-temp-file noteworthy-settings-file
-      (insert ";; Noteworthy settings - auto-generated, do not edit\n")
-      (let ((print-length nil)
-            (print-level nil))
+      (insert ";; Noteworthy global settings - fallback\n")
+      (let ((print-length nil) (print-level nil))
         (prin1 settings (current-buffer)))
-      (insert "\n"))))
+      (insert "\n"))
 
-;; Load settings immediately
+    ;; 2. Save Project Local (if active)
+    (when (and (bound-and-true-p noteworthy-project-root)
+               (file-directory-p noteworthy-project-root))
+      (let ((local-file (expand-file-name ".noteworthy-layout" noteworthy-project-root)))
+        (with-temp-file local-file
+          (insert ";; Noteworthy project settings\n")
+          (let ((print-length nil) (print-level nil))
+            (prin1 settings (current-buffer)))
+          (insert "\n"))))))
+
+;; Load global settings immediately on startup
 (noteworthy-load-settings)
 
 ;; Save config on Emacs exit

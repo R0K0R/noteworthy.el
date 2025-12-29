@@ -47,11 +47,32 @@ Continue list if on list item, else use default evil-open-above."
       (kbd "<backtab>") #'noteworthy-typst-dedent-line)
     (evil-define-key 'normal noteworthy-typst-mode-map
       "o" #'noteworthy-typst-smart-o
-      "O" #'noteworthy-typst-smart-O)
-    (evil-define-key 'normal noteworthy-typst-mode-map
+      "O" #'noteworthy-typst-smart-O
       (kbd "M-o") #'noteworthy-typst-send-position)
     (evil-define-key 'insert noteworthy-typst-mode-map
-      (kbd "M-o") #'noteworthy-typst-send-position)))
+      (kbd "M-o") #'noteworthy-typst-send-position)
+
+    ;; Remote PDF Scrolling (Alt+Shift+hjkl)
+    (evil-define-key '(normal insert) noteworthy-typst-mode-map
+      (kbd "M-J") (lambda () (interactive) (noteworthy-pdf-scroll 'down))
+      (kbd "M-K") (lambda () (interactive) (noteworthy-pdf-scroll 'up))
+      (kbd "M-H") (lambda () (interactive) (noteworthy-pdf-scroll 'left))
+      (kbd "M-L") (lambda () (interactive) (noteworthy-pdf-scroll 'right)))))
+
+(defun noteworthy-pdf-scroll (direction)
+  "Scroll the visible PDF window in DIRECTION."
+  (let ((pdf-window (cl-find-if (lambda (w)
+                                  (with-selected-window w
+                                    (eq major-mode 'pdf-view-mode)))
+                                (window-list))))
+    (if pdf-window
+        (with-selected-window pdf-window
+          (cond
+           ((eq direction 'up) (pdf-view-previous-line-or-previous-page 5))
+           ((eq direction 'down) (pdf-view-next-line-or-next-page 5))
+           ((eq direction 'left) (image-backward-hscroll 20))
+           ((eq direction 'right) (image-forward-hscroll 20))))
+      (message "No PDF window found to scroll"))))
 
 (noteworthy-evil-setup)
 
