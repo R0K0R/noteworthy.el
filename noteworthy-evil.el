@@ -32,7 +32,7 @@ Continue list if on list item, else use default evil-open-above."
 (defun noteworthy-evil-setup ()
   "Apply Evil bindings for Noteworthy Typst mode."
   (with-eval-after-load 'evil
-  (with-eval-after-load 'evil
+
     (evil-define-key 'insert noteworthy-typst-mode-map
       (kbd "SPC") #'noteworthy-typst-smart-space
       (kbd "RET") #'noteworthy-typst-smart-newline
