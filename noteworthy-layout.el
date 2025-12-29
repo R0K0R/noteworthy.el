@@ -33,29 +33,16 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
 
     ;; Find master file
     (let ((master-path
-           (cond
-            ;; 1. Try templates/parser.typ (Standard Noteworthy)
-            ((file-exists-p (expand-file-name "templates/parser.typ" dir))
-             (expand-file-name "templates/parser.typ" dir))
-            
-            ;; 2. Try parser.typ in root
-            ((file-exists-p (expand-file-name "parser.typ" dir))
-             (expand-file-name "parser.typ" dir))
-            
-            ;; 3. Try main.typ in root
-            ((file-exists-p (expand-file-name "main.typ" dir))
-             (expand-file-name "main.typ" dir))
-
-            ;; 4. Try master.typ in root
-            ((file-exists-p (expand-file-name "master.typ" dir))
-             (expand-file-name "master.typ" dir))
-
-            ;; 5. Fallback: First .typ file found recursively
-            (t 
-             (let ((typ-files (directory-files-recursively dir "\\.typ$")))
-               (if typ-files
-                   (car typ-files)
-                 (expand-file-name "main.typ" dir)))))))
+           (let ((core-parser (expand-file-name "templates/core/parser.typ" dir))
+                 (old-parser (expand-file-name "templates/parser.typ" dir)))
+             (cond
+              ((file-exists-p core-parser) core-parser)
+              ((file-exists-p old-parser) old-parser)
+              (t
+               (let ((typ-files (directory-files-recursively dir "\\.typ$")))
+                 (if typ-files
+                     (car typ-files)
+                   (expand-file-name "main.typ" dir))))))))
       
       (setq-default noteworthy-master-file master-path)
       (setq noteworthy-master-file master-path)
