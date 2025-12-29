@@ -1,5 +1,12 @@
 ;;; noteworthy-layout.el --- Workspace layout for Noteworthy  -*- lexical-binding: t; -*-
 
+(require 'treemacs)
+(require 'pdf-tools)
+(require 'noteworthy-preview)
+(require 'vterm)
+
+
+
 (defun noteworthy-init (&optional project-dir pdf-path-arg)
   "Initialize Noteworthy workspace with PROJECT-DIR and optional PDF-PATH-ARG.
 Sets up treemacs, editor, terminal, preview, and PDF windows."
@@ -48,10 +55,18 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
       (split-window-below (floor (* 0.75 (window-height))))
       (other-window 1)
       (let ((default-directory dir)
-            (shell (if (and (boundp 'noteworthy-terminal-shell) noteworthy-terminal-shell)
-                       noteworthy-terminal-shell
-                     (or (executable-find "bash") (getenv "SHELL")))))
-        (ansi-term shell))
+            (shell-cmd (if (and (boundp 'noteworthy-terminal-shell) noteworthy-terminal-shell)
+                           noteworthy-terminal-shell
+                         (or (executable-find "bash") (getenv "SHELL")))))
+        ;; Configure vterm to run our specific command
+        (let ((cmd (if (listp shell-cmd)
+                       (mapconcat #'identity shell-cmd " ")
+                     shell-cmd))
+              (old-shell (if (boundp 'vterm-shell) vterm-shell nil)))
+          (setq vterm-shell cmd)
+          (unwind-protect
+              (vterm)
+            (when old-shell (setq vterm-shell old-shell)))))
 
       (select-window editor-window)
       
@@ -78,10 +93,13 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
                         (lambda (ed-win pdf-f)
                           (when (window-live-p ed-win)
                             (select-window ed-win)
-                            (let* ((pdf-cols (max 10 (or noteworthy-pdf-width
-                                                         (round (* 0.35 (frame-width))))))
-                                   (pdf-window (split-window ed-win pdf-cols 'right)))
+                            (let* ((pdf-window (split-window ed-win nil 'right))
+                                   (target-width (or noteworthy-pdf-width (round (* 0.35 (frame-width)))))
+                                   (current-width (window-total-width pdf-window))
+                                   (delta (- target-width current-width)))
                               (set-window-parameter pdf-window 'noteworthy-pdf t)
+                              (when (/= delta 0)
+                                (ignore-errors (window-resize pdf-window delta t)))
                               (select-window pdf-window)
                               (find-file pdf-f)
                               ;; Only fit zoom to width, do not resize window
