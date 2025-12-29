@@ -197,23 +197,31 @@ AND `.noteworthy-layout` in the project root (if active)."
 (add-hook 'kill-emacs-hook #'noteworthy-save-config)
 
 (defun noteworthy-toggle-log ()
-  "Toggle between vterm and the Typst log buffer (*ws-typst-server*)."
+  "Toggle the dedicated terminal window between vterm and Typst log."
   (interactive)
-  (let ((log-buffer "*ws-typst-server*")
-        (vterm-buffer "*vterm*")) ;; Default vterm name, might need adjustment if renamed
-    (cond
-     ((string= (buffer-name) "ws-typst-server") ;; Handle plain name if * stripped
-      (switch-to-buffer vterm-buffer))
-     ((string= (buffer-name) "*ws-typst-server*")
-      (switch-to-buffer vterm-buffer))
-     ((eq major-mode 'vterm-mode)
-      (if (get-buffer log-buffer)
-          (switch-to-buffer log-buffer)
-        (message "Noteworthy: Log buffer %s does not exist." log-buffer)))
-     (t
-      ;; logic: if completely elsewhere, maybe jump to log?
-      (if (get-buffer log-buffer)
-           (switch-to-buffer log-buffer)
-        (message "Noteworthy: Log buffer %s does not exist." log-buffer))))))
+  (let* ((log-buffer-name "*ws-typst-server*")
+         (vterm-buffer-name "*vterm*")
+         ;; Find the window displaying either vterm or log
+         (target-window (cl-find-if (lambda (w)
+                                      (with-selected-window w
+                                        (let ((bname (buffer-name)))
+                                          (or (string= bname log-buffer-name)
+                                              (string= bname vterm-buffer-name)
+                                              (eq major-mode 'vterm-mode)))))
+                                    (window-list))))
+    (if target-window
+        (with-selected-window target-window
+          (let ((current (buffer-name)))
+            (cond
+             ((or (string= current log-buffer-name)
+                  (string-suffix-p "typst-server*" current))
+              (if (get-buffer vterm-buffer-name)
+                  (switch-to-buffer vterm-buffer-name)
+                (message "Noteworthy: vterm buffer not found")))
+             (t
+              (if (get-buffer log-buffer-name)
+                  (switch-to-buffer log-buffer-name)
+                (message "Noteworthy: Log buffer %s does not exist." log-buffer-name))))))
+      (message "Noteworthy: No terminal/log window found."))))
 
 (provide 'noteworthy-layout)
