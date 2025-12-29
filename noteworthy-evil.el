@@ -45,12 +45,21 @@ Continue list if on list item, else use default evil-open-above."
       (kbd "<backspace>") #'noteworthy-typst-smart-backspace
       (kbd "TAB") #'indent-for-tab-command
       (kbd "<backtab>") #'noteworthy-typst-dedent-line)
+    ;; Normal mode bindings
     (evil-define-key 'normal noteworthy-typst-mode-map
       "o" #'noteworthy-typst-smart-o
-      "O" #'noteworthy-typst-smart-O
+      "O" #'noteworthy-typst-smart-O)
+
+    ;; Explicitly bind M-o separately to ensure it registers
+    (evil-define-key 'normal noteworthy-typst-mode-map
       (kbd "M-o") #'noteworthy-typst-send-position)
+    
+    ;; Backup: Bind in the minor mode map directly (Evil allows fallthrough to this)
+    (define-key noteworthy-typst-mode-map (kbd "M-o") #'noteworthy-typst-send-position)
+
     (evil-define-key 'insert noteworthy-typst-mode-map
       (kbd "M-o") #'noteworthy-typst-send-position)
+
 
     ;; Remote PDF Scrolling (Alt+Shift+hjkl)
     (evil-define-key '(normal insert) noteworthy-typst-mode-map
