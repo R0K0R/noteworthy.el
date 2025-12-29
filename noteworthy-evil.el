@@ -57,7 +57,11 @@ Continue list if on list item, else use default evil-open-above."
       (kbd "M-J") (lambda () (interactive) (noteworthy-pdf-scroll 'down))
       (kbd "M-K") (lambda () (interactive) (noteworthy-pdf-scroll 'up))
       (kbd "M-H") (lambda () (interactive) (noteworthy-pdf-scroll 'left))
-      (kbd "M-L") (lambda () (interactive) (noteworthy-pdf-scroll 'right)))))
+      (kbd "M-H") (lambda () (interactive) (noteworthy-pdf-scroll 'left))
+      (kbd "M-L") (lambda () (interactive) (noteworthy-pdf-scroll 'right))
+      
+      ;; Toggle Log (Alt+t l)
+      (kbd "M-t l") #'noteworthy-toggle-log)))
 
 (defun noteworthy-pdf-scroll (direction)
   "Scroll the visible PDF window in DIRECTION."

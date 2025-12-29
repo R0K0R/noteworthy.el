@@ -196,4 +196,24 @@ AND `.noteworthy-layout` in the project root (if active)."
 ;; Save config on Emacs exit
 (add-hook 'kill-emacs-hook #'noteworthy-save-config)
 
+(defun noteworthy-toggle-log ()
+  "Toggle between vterm and the Typst log buffer (*ws-typst-server*)."
+  (interactive)
+  (let ((log-buffer "*ws-typst-server*")
+        (vterm-buffer "*vterm*")) ;; Default vterm name, might need adjustment if renamed
+    (cond
+     ((string= (buffer-name) "ws-typst-server") ;; Handle plain name if * stripped
+      (switch-to-buffer vterm-buffer))
+     ((string= (buffer-name) "*ws-typst-server*")
+      (switch-to-buffer vterm-buffer))
+     ((eq major-mode 'vterm-mode)
+      (if (get-buffer log-buffer)
+          (switch-to-buffer log-buffer)
+        (message "Noteworthy: Log buffer %s does not exist." log-buffer)))
+     (t
+      ;; logic: if completely elsewhere, maybe jump to log?
+      (if (get-buffer log-buffer)
+           (switch-to-buffer log-buffer)
+        (message "Noteworthy: Log buffer %s does not exist." log-buffer))))))
+
 (provide 'noteworthy-layout)
