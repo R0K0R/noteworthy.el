@@ -51,20 +51,13 @@ Traverses up the AST:
       "")))
 
 (defun noteworthy-typst-get-indent-unit ()
-  "Detect the indentation unit used in the buffer.
-Returns a string of spaces (default 2 spaces if can't detect)."
-  (or (and (boundp 'noteworthy-indent-override)
-           noteworthy-indent-override)
-      (save-excursion
-        (goto-char (point-min))
-        ;; Look for first indented line
-        (if (re-search-forward "^\\(  +\\)[^ \t\n]" nil t)
-            (let ((indent (match-string 1)))
-              ;; Return the detected indent if it's sensible (2-4 spaces)
-              (if (and (>= (length indent) 2) (<= (length indent) 4))
-                  indent
-                "  "))  ;; Default 2 spaces
-          "  ")))
+  "Get the indentation unit for this buffer.
+Uses `evil-shift-width` if available (set by dtrt-indent or config),
+otherwise falls back to `tab-width` or 2 spaces."
+  (make-string (or (and (boundp 'evil-shift-width) evil-shift-width)
+                   tab-width
+                   2)
+               ?\s))
 
 (defun noteworthy-typst-smart-newline ()
   "Insert newline with smart indentation for lists and brackets."
