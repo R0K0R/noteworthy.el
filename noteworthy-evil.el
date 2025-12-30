@@ -4,30 +4,55 @@
 (require 'noteworthy-typst)
 
 (defun noteworthy-typst-smart-o ()
-  "Open line below with smart indentation."
+  "Open line below with consistent indentation (same as RET)."
   (interactive)
   (cond
+   ;; List context: continue list
    ((noteworthy-typst-get-list-marker)
     (let ((prefix (noteworthy-typst-get-list-marker)))
       (end-of-line)
       (newline)
       (insert prefix)
       (evil-insert-state)))
-   (t (evil-open-below 1))))
+   ;; Inside brackets: maintain current indent
+   ((save-excursion
+      (ignore-errors
+        (backward-up-list 1)
+        (memq (char-after) '(?\( ?\[ ?\{))))
+    (let ((indent (noteworthy-typst-get-current-indent)))
+      (end-of-line)
+      (newline)
+      (insert indent)
+      (evil-insert-state)))
+   ;; Default: use current line's indentation
+   (t
+    (let ((indent (noteworthy-typst-get-current-indent)))
+      (end-of-line)
+      (newline)
+      (insert indent)
+      (evil-insert-state)))))
 
 (defun noteworthy-typst-smart-O ()
-  "Open line above.
-Continue list if on list item, else use default evil-open-above."
+  "Open line above with consistent indentation.
+Continue list if on list item, else maintain current indent."
   (interactive)
-  (let ((list-prefix (noteworthy-typst-get-list-marker)))
-    (if list-prefix
-        (progn
-          (beginning-of-line)
-          (newline)
-          (forward-line -1)
-          (insert list-prefix)
-          (evil-insert-state))
-      (evil-open-above 1))))
+  (let ((list-prefix (noteworthy-typst-get-list-marker))
+        (indent (noteworthy-typst-get-current-indent)))
+    (cond
+     ;; List context
+     (list-prefix
+      (beginning-of-line)
+      (newline)
+      (forward-line -1)
+      (insert list-prefix)
+      (evil-insert-state))
+     ;; Default: maintain current indent
+     (t
+      (beginning-of-line)
+      (newline)
+      (forward-line -1)
+      (insert indent)
+      (evil-insert-state)))))
 
 (defun noteworthy-evil-setup ()
   "Apply Evil bindings for Noteworthy Typst mode."
