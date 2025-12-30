@@ -57,6 +57,8 @@ Traverses up the AST:
            (bound-and-true-p corfu--candidates))
       (call-interactively 'corfu-insert)
     (cond
+     ;; Case 1: Empty brackets like (|) or [|] or {|}
+     ;; -> Expand to multi-line with indent
      ((and (memq (char-before) '(?\( ?\[ ?\{))
            (memq (char-after) '(?\) ?\] ?\})))
       (let ((base-indent (noteworthy-typst-get-current-indent)))
@@ -67,6 +69,7 @@ Traverses up the AST:
           (insert "\n")
           (insert base-indent))))
 
+     ;; Case 2: At end of line in a list context
      ((and (eolp) (noteworthy-typst-get-list-marker))
       (let ((prefix (noteworthy-typst-get-list-marker))
             (current-line-empty-p (save-excursion
@@ -80,6 +83,18 @@ Traverses up the AST:
           (newline)
           (insert prefix))))
 
+     ;; Case 3: Inside function call/brackets with content - maintain same indent
+     ((save-excursion
+        (let ((start (point)))
+          (ignore-errors
+            (backward-up-list 1)
+            (and (memq (char-after) '(?\( ?\[ ?\{))
+                 (< (point) start)))))
+      (let ((prev-indent (noteworthy-typst-get-current-indent)))
+        (newline)
+        (insert prev-indent)))
+
+     ;; Default: standard newline-and-indent
      (t (newline-and-indent)))))
 
 (defun noteworthy-typst-dedent-line ()
