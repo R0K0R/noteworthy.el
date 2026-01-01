@@ -127,6 +127,8 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
                                                 pdf-window)))))
                         editor-window pdf-file))
 
+      ;; Return focus to editor window
+      (select-window editor-window)
       (message "Noteworthy initialized: %s" dir))))
 
 (defvar noteworthy-preview-width nil
