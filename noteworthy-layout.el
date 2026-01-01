@@ -104,30 +104,25 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
               (pdf-tools-install)
             (message "Noteworthy: pdf-tools not found!")))
         
-        (run-with-timer 0.6 nil
-                        (lambda (ed-win pdf-f)
-                          (when (window-live-p ed-win)
-                            (select-window ed-win)
-                            (let* ((pdf-window (split-window ed-win nil 'right))
-                                   (target-width (or noteworthy-pdf-width (round (* 0.35 (frame-width)))))
-                                   (current-width (window-total-width pdf-window))
-                                   (delta (- target-width current-width)))
-                              (set-window-parameter pdf-window 'noteworthy-pdf t)
-                              (when (/= delta 0)
-                                (ignore-errors (window-resize pdf-window delta t)))
-                              (select-window pdf-window)
-                              (find-file pdf-f)
-                              ;; Only fit zoom to width, do not resize window
-                              (when (bound-and-true-p pdf-view-mode)
-                                (run-with-timer 0.1 nil
-                                                (lambda (win)
-                                                  (when (window-live-p win)
-                                                    (with-selected-window win
-                                                      (pdf-view-fit-width-to-window))))
-                                                pdf-window)
-                              (when (window-live-p ed-win)
-                                (select-window ed-win))))))
-                        editor-window pdf-file))
+        (when (window-live-p editor-window)
+          (select-window editor-window)
+          (let* ((pdf-window (split-window editor-window nil 'right))
+                 (target-width (or noteworthy-pdf-width (round (* 0.35 (frame-width)))))
+                 (current-width (window-total-width pdf-window))
+                 (delta (- target-width current-width)))
+            (set-window-parameter pdf-window 'noteworthy-pdf t)
+            (when (/= delta 0)
+              (ignore-errors (window-resize pdf-window delta t)))
+            (select-window pdf-window)
+            (find-file pdf-file)
+            ;; Only fit zoom to width, do not resize window
+            (when (bound-and-true-p pdf-view-mode)
+              (run-with-timer 0.1 nil
+                              (lambda (win)
+                                (when (window-live-p win)
+                                  (with-selected-window win
+                                    (pdf-view-fit-width-to-window))))
+                              pdf-window))))))
 
       ;; Return focus to editor window
       (select-window editor-window)
