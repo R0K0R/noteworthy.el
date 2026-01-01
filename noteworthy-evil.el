@@ -4,17 +4,29 @@
 (require 'noteworthy-typst)
 
 (defun noteworthy-typst-smart-o ()
-  "Open line below with consistent indentation (same as RET)."
+  "Open line below with smart indentation."
   (interactive)
   (cond
-   ;; List context: continue list
+   ;; List context
    ((noteworthy-typst-get-list-marker)
     (let ((prefix (noteworthy-typst-get-list-marker)))
       (end-of-line)
       (newline)
       (insert prefix)
       (evil-insert-state)))
-   ;; Inside brackets: maintain current indent
+   
+   ;; At end of line with opening bracket → add indent
+   ((save-excursion
+      (back-to-indentation)
+      (looking-at ".*[\\[{(][ \t]*$"))
+    (let ((base-indent (noteworthy-typst-get-current-indent))
+          (indent-unit (noteworthy-typst-get-indent-unit)))
+      (end-of-line)
+      (newline)
+      (insert base-indent indent-unit)
+      (evil-insert-state)))
+   
+   ;; Inside brackets - maintain indent
    ((save-excursion
       (ignore-errors
         (backward-up-list 1)
@@ -24,7 +36,8 @@
       (newline)
       (insert indent)
       (evil-insert-state)))
-   ;; Default: use current line's indentation
+   
+   ;; Default: maintain current indent
    (t
     (let ((indent (noteworthy-typst-get-current-indent)))
       (end-of-line)
@@ -33,21 +46,45 @@
       (evil-insert-state)))))
 
 (defun noteworthy-typst-smart-O ()
-  "Open line above with consistent indentation.
-Continue list if on list item, else maintain current indent."
+  "Open line above with smart indentation."
   (interactive)
-  (let ((list-prefix (noteworthy-typst-get-list-marker))
-        (indent (noteworthy-typst-get-current-indent)))
-    (cond
-     ;; List context
-     (list-prefix
+  (cond
+   ;; List context
+   ((noteworthy-typst-get-list-marker)
+    (let ((prefix (noteworthy-typst-get-list-marker)))
       (beginning-of-line)
       (newline)
       (forward-line -1)
-      (insert list-prefix)
-      (evil-insert-state))
-     ;; Default: maintain current indent
-     (t
+      (insert prefix)
+      (evil-insert-state)))
+   
+   ;; At start of line with closing bracket → add indent
+   ((save-excursion
+      (back-to-indentation)
+      (looking-at "[\\]})]"))
+    (let ((base-indent (noteworthy-typst-get-current-indent))
+          (indent-unit (noteworthy-typst-get-indent-unit)))
+      (beginning-of-line)
+      (newline)
+      (forward-line -1)
+      (insert base-indent indent-unit)
+      (evil-insert-state)))
+   
+   ;; Inside brackets - maintain indent
+   ((save-excursion
+      (ignore-errors
+        (backward-up-list 1)
+        (memq (char-after) '(?\( ?\[ ?\{))))
+    (let ((indent (noteworthy-typst-get-current-indent)))
+      (beginning-of-line)
+      (newline)
+      (forward-line -1)
+      (insert indent)
+      (evil-insert-state)))
+   
+   ;; Default: maintain current indent
+   (t
+    (let ((indent (noteworthy-typst-get-current-indent)))
       (beginning-of-line)
       (newline)
       (forward-line -1)

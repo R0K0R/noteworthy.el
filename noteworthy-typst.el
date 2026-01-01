@@ -60,26 +60,34 @@ otherwise falls back to `tab-width` or 2 spaces."
                ?\s))
 
 (defun noteworthy-typst-smart-newline ()
-  "Insert newline with smart indentation for lists and brackets."
+  "Handle newlines with smart indent detection."
   (interactive)
   (if (and (bound-and-true-p corfu-mode)
            (bound-and-true-p corfu--candidates))
       (call-interactively 'corfu-insert)
     (cond
-     ;; Case 1: Empty brackets like (|) or [|] or {|}
-     ;; -> Expand to multi-line with indent
+     ;; Case 1: Expand empty brackets (|)
      ((and (memq (char-before) '(?\( ?\[ ?\{))
            (memq (char-after) '(?\) ?\] ?\})))
       (let ((base-indent (noteworthy-typst-get-current-indent))
             (indent-unit (noteworthy-typst-get-indent-unit)))
-        (insert "\n")
-        (insert base-indent)
-        (insert indent-unit)
+        (newline)
+        (insert base-indent indent-unit)
         (save-excursion
-          (insert "\n")
+          (newline)
           (insert base-indent))))
 
-     ;; Case 2: At end of line in a list context
+     ;; Case 2: At end of line with opening bracket → add indent
+     ((and (eolp)
+           (save-excursion
+             (back-to-indentation)
+             (looking-at ".*[\\[{(][ \t]*$")))
+      (let ((base-indent (noteworthy-typst-get-current-indent))
+            (indent-unit (noteworthy-typst-get-indent-unit)))
+        (newline)
+        (insert base-indent indent-unit)))
+
+     ;; Case 3: Continue/End Lists
      ((and (eolp) (noteworthy-typst-get-list-marker))
       (let ((prefix (noteworthy-typst-get-list-marker))
             (current-line-empty-p (save-excursion
@@ -93,19 +101,20 @@ otherwise falls back to `tab-width` or 2 spaces."
           (newline)
           (insert prefix))))
 
-     ;; Case 3: Inside function call/brackets with content - maintain same indent
+     ;; Case 4: Inside brackets - maintain current indent
      ((save-excursion
-        (let ((start (point)))
-          (ignore-errors
-            (backward-up-list 1)
-            (and (memq (char-after) '(?\( ?\[ ?\{))
-                 (< (point) start)))))
-      (let ((prev-indent (noteworthy-typst-get-current-indent)))
+        (ignore-errors
+          (backward-up-list 1)
+          (memq (char-after) '(?\( ?\[ ?\{))))
+      (let ((indent (noteworthy-typst-get-current-indent)))
         (newline)
-        (insert prev-indent)))
+        (insert indent)))
 
-     ;; Default: standard newline-and-indent
-     (t (newline-and-indent)))))
+     ;; Default: maintain current indent
+     (t 
+      (let ((indent (noteworthy-typst-get-current-indent)))
+        (newline)
+        (insert indent))))))
 
 (defun noteworthy-typst-dedent-line ()
   "Remove one level of indentation from the current line."

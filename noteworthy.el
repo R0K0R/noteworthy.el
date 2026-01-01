@@ -2,7 +2,7 @@
 
 ;; Author: r0k0r
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1") (typst-ts-mode "0.1") (typst-preview "0.1") (treemacs "2.9") (pdf-tools "1.0"))
+;; Package-Requires: ((emacs "29.1") (typst-ts-mode "0.1") (typst-preview "0.1") (dtrt-indent) (treemacs "2.9") (pdf-tools "1.0"))
 ;; Keywords: typst, languages, tools
 ;; URL: https://github.com/R0K0R/noteworthy.el
 
