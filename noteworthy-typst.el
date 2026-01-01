@@ -81,14 +81,22 @@ otherwise falls back to `tab-width` or 2 spaces."
      ((and (eolp)
            (save-excursion
              (back-to-indentation)
-             ;; Match opening bracket NOT preceded by backslash
-             (looking-at ".*[^\\\\][\\[{(][ \t]*$")))
+             (looking-at ".*[\\[{(][ \t]*$")))
       (let ((base-indent (noteworthy-typst-get-current-indent))
             (indent-unit (noteworthy-typst-get-indent-unit)))
         (newline)
         (insert base-indent indent-unit)))
 
-     ;; Case 3: Continue/End Lists
+     ;; Case 3: Line ends with backslash (forced breakout) -> maintain indent
+     ((and (eolp)
+           (save-excursion
+             (skip-chars-backward " \t")
+             (eq (char-before) ?\\)))
+      (let ((indent (noteworthy-typst-get-current-indent)))
+        (newline)
+        (insert indent)))
+
+     ;; Case 4: Continue/End Lists
      ((and (eolp) (noteworthy-typst-get-list-marker))
       (let ((prefix (noteworthy-typst-get-list-marker))
             (current-line-empty-p (save-excursion

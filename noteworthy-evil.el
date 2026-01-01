@@ -18,7 +18,7 @@
    ;; At end of line with opening bracket → add indent
    ((save-excursion
       (back-to-indentation)
-      (looking-at ".*[^\\\\][\\[{(][ \t]*$"))
+      (looking-at ".*[\\[{(][ \t]*$"))
     (let ((base-indent (noteworthy-typst-get-current-indent))
           (indent-unit (noteworthy-typst-get-indent-unit)))
       (end-of-line)
