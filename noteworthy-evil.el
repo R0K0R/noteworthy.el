@@ -61,7 +61,7 @@
    ;; At start of line with closing bracket → add indent
    ((save-excursion
       (back-to-indentation)
-      (looking-at "[\\]})]"))
+      (looking-at "[]})]"))
     (let ((base-indent (noteworthy-typst-get-current-indent))
           (indent-unit (noteworthy-typst-get-indent-unit)))
       (beginning-of-line)
