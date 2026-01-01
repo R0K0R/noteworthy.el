@@ -7,6 +7,39 @@
 
 
 
+;; Helper to setup PDF window
+(defun noteworthy--setup-pdf-window (editor-window pdf-file)
+  "Setup the PDF window next to EDITOR-WINDOW displaying PDF-FILE."
+  (when (and pdf-file
+             (stringp pdf-file)
+             (not (string-empty-p pdf-file))
+             (not (file-directory-p pdf-file)))
+    ;; Ensure pdf-tools is ready
+    (unless (bound-and-true-p pdf-view-mode)
+      (if (fboundp 'pdf-tools-install)
+          (pdf-tools-install)
+        (message "Noteworthy: pdf-tools not found!")))
+
+    (when (window-live-p editor-window)
+      (select-window editor-window)
+      (let* ((pdf-window (split-window editor-window nil 'right))
+             (target-width (or noteworthy-pdf-width (round (* 0.35 (frame-width)))))
+             (current-width (window-total-width pdf-window))
+             (delta (- target-width current-width)))
+        (set-window-parameter pdf-window 'noteworthy-pdf t)
+        (when (/= delta 0)
+          (ignore-errors (window-resize pdf-window delta t)))
+        (select-window pdf-window)
+        (find-file pdf-file)
+        ;; Only fit zoom to width, do not resize window
+        (when (bound-and-true-p pdf-view-mode)
+          (run-with-timer 0.1 nil
+                          (lambda (win)
+                            (when (window-live-p win)
+                              (with-selected-window win
+                                (pdf-view-fit-width-to-window))))
+                          pdf-window))))))
+
 (defun noteworthy-init (&optional project-dir pdf-path-arg)
   "Initialize Noteworthy workspace with PROJECT-DIR and optional PDF-PATH-ARG.
 Sets up treemacs, editor, terminal, preview, and PDF windows."
@@ -57,7 +90,6 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
         (treemacs-add-and-display-current-project-exclusively))
       
       ;; 2. Setup Terminal (Bottom of Editor)
-      ;; 2. Setup Terminal (Bottom of Editor)
       (select-window editor-window)
       (let ((term-window (split-window-below (floor (* 0.75 (window-height))))))
         (select-window term-window)
@@ -79,53 +111,27 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
 
       (select-window editor-window)
       
-      ;; 3. Start Typst Preview (First)
-      (when (and (noteworthy-xwidget-available-p)
-                 (fboundp 'typst-preview-start))
-        (let ((buf (current-buffer)))
-          (run-with-timer 0.1 nil
-                          (lambda ()
-                            (when (buffer-live-p buf)
-                              (with-current-buffer buf
-                                (setq-local noteworthy-project-root dir)
-                                (setq-local noteworthy-master-file noteworthy-master-file)
-                                (typst-preview-start t)))))))
+      ;; 3. Start Typst Preview & Chain PDF Setup
+      (if (and (noteworthy-xwidget-available-p)
+               (fboundp 'typst-preview-start))
+          (let ((buf (current-buffer)))
+            ;; Start preview, then chain PDF setup
+            (run-with-timer 0.1 nil
+                            (lambda ()
+                              (when (buffer-live-p buf)
+                                (with-current-buffer buf
+                                  (setq-local noteworthy-project-root dir)
+                                  (setq-local noteworthy-master-file noteworthy-master-file)
+                                  (typst-preview-start t)
+                                  ;; CHAIN: Setup PDF after preview starts
+                                  (noteworthy--setup-pdf-window editor-window pdf-file)
+                                  ;; FINAL: Restore focus
+                                  (when (window-live-p editor-window)
+                                    (select-window editor-window)))))))
+        ;; Else: No preview, run PDF setup immediately
+        (noteworthy--setup-pdf-window editor-window pdf-file)
+        (select-window editor-window))
 
-      (select-window editor-window)
-
-      ;; 4. Setup PDF Window (Right - Delayed to allow Preview to claim space)
-      (when (and pdf-file
-                 (stringp pdf-file)
-                 (not (string-empty-p pdf-file))
-                 (not (file-directory-p pdf-file)))
-        ;; Ensure pdf-tools is ready
-        (unless (bound-and-true-p pdf-view-mode)
-          (if (fboundp 'pdf-tools-install)
-              (pdf-tools-install)
-            (message "Noteworthy: pdf-tools not found!")))
-        
-        (when (window-live-p editor-window)
-          (select-window editor-window)
-          (let* ((pdf-window (split-window editor-window nil 'right))
-                 (target-width (or noteworthy-pdf-width (round (* 0.35 (frame-width)))))
-                 (current-width (window-total-width pdf-window))
-                 (delta (- target-width current-width)))
-            (set-window-parameter pdf-window 'noteworthy-pdf t)
-            (when (/= delta 0)
-              (ignore-errors (window-resize pdf-window delta t)))
-            (select-window pdf-window)
-            (find-file pdf-file)
-            ;; Only fit zoom to width, do not resize window
-            (when (bound-and-true-p pdf-view-mode)
-              (run-with-timer 0.1 nil
-                              (lambda (win)
-                                (when (window-live-p win)
-                                  (with-selected-window win
-                                    (pdf-view-fit-width-to-window))))
-                              pdf-window))))))
-
-      ;; Return focus to editor window
-      (select-window editor-window)
       (message "Noteworthy initialized: %s" dir))))
 
 (defvar noteworthy-preview-width nil
