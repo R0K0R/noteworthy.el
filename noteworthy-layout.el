@@ -124,7 +124,9 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
                                                   (when (window-live-p win)
                                                     (with-selected-window win
                                                       (pdf-view-fit-width-to-window))))
-                                                pdf-window)))))
+                                                pdf-window)
+                              (when (window-live-p ed-win)
+                                (select-window ed-win))))))
                         editor-window pdf-file))
 
       ;; Return focus to editor window
