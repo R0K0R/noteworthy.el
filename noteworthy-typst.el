@@ -81,7 +81,7 @@ otherwise falls back to `tab-width` or 2 spaces."
      ((and (eolp)
            (save-excursion
              (back-to-indentation)
-             (looking-at ".*[\\[{(][ \t]*$")))
+             (looking-at ".*[[{(][ \t]*$")))
       (let ((base-indent (noteworthy-typst-get-current-indent))
             (indent-unit (noteworthy-typst-get-indent-unit)))
         (newline)
