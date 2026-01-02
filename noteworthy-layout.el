@@ -115,21 +115,23 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
       (if (and (noteworthy-xwidget-available-p)
                (fboundp 'typst-preview-start))
           (let ((buf (current-buffer)))
-            ;; Start preview, then chain PDF setup
-            (run-with-timer 0.1 nil
                             (lambda ()
                               (when (buffer-live-p buf)
                                 (with-current-buffer buf
                                   (setq-local noteworthy-project-root dir)
                                   (setq-local noteworthy-master-file noteworthy-master-file)
                                   (typst-preview-start t)
-                                  ;; CHAIN: Setup PDF after preview starts
-                                  (noteworthy--setup-pdf-window editor-window pdf-file)
-                                  ;; FINAL: Restore focus
+                                  ;; LAZY LOAD: Defer PDF setup to idle timer (1s)
+                                  (run-with-idle-timer 1.0 nil
+                                                       #'noteworthy--setup-pdf-window 
+                                                       editor-window pdf-file)
+                                  ;; Restore focus immediately
                                   (when (window-live-p editor-window)
                                     (select-window editor-window)))))))
-        ;; Else: No preview, run PDF setup immediately
-        (noteworthy--setup-pdf-window editor-window pdf-file)
+        ;; Else: No preview, run PDF setup lazily
+        (run-with-idle-timer 0.5 nil 
+                             #'noteworthy--setup-pdf-window 
+                             editor-window pdf-file)
         (select-window editor-window))
 
       (message "Noteworthy initialized: %s" dir))))
