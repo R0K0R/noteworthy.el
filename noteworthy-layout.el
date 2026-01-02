@@ -29,16 +29,25 @@
         (set-window-parameter pdf-window 'noteworthy-pdf t)
         (when (/= delta 0)
           (ignore-errors (window-resize pdf-window delta t)))
+        
+        ;; Show placeholder buffer immediately
         (select-window pdf-window)
-        (find-file pdf-file)
-        ;; Only fit zoom to width, do not resize window
-        (when (bound-and-true-p pdf-view-mode)
-          (run-with-timer 0.1 nil
-                          (lambda (win)
-                            (when (window-live-p win)
-                              (with-selected-window win
-                                (pdf-view-fit-width-to-window))))
-                          pdf-window))))))
+        (let ((buf (get-buffer-create " *loading-pdf*")))
+          (with-current-buffer buf
+            (erase-buffer)
+            (insert "Loading PDF... (Lazy)"))
+          (switch-to-buffer buf))
+
+        ;; Lazy load the actual file on idle timer
+        (run-with-idle-timer 0.2 nil
+                             (lambda (win file)
+                               (when (and (window-live-p win)
+                                          (file-exists-p file))
+                                 (with-selected-window win
+                                   (find-file file)
+                                   (when (bound-and-true-p pdf-view-mode)
+                                     (pdf-view-fit-width-to-window)))))
+                             pdf-window pdf-file)))))
 
 (defun noteworthy-init (&optional project-dir pdf-path-arg)
   "Initialize Noteworthy workspace with PROJECT-DIR and optional PDF-PATH-ARG.
@@ -115,23 +124,19 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
       (if (and (noteworthy-xwidget-available-p)
                (fboundp 'typst-preview-start))
           (let ((buf (current-buffer)))
-                            (lambda ()
-                              (when (buffer-live-p buf)
-                                (with-current-buffer buf
-                                  (setq-local noteworthy-project-root dir)
-                                  (setq-local noteworthy-master-file noteworthy-master-file)
-                                  (typst-preview-start t)
-                                  ;; LAZY LOAD: Defer PDF setup to idle timer (1s)
-                                  (run-with-idle-timer 1.0 nil
-                                                       #'noteworthy--setup-pdf-window 
-                                                       editor-window pdf-file)
-                                  ;; Restore focus immediately
-                                  (when (window-live-p editor-window)
-                                    (select-window editor-window)))))))
-        ;; Else: No preview, run PDF setup lazily
-        (run-with-idle-timer 0.5 nil 
-                             #'noteworthy--setup-pdf-window 
-                             editor-window pdf-file)
+            (lambda ()
+              (when (buffer-live-p buf)
+                (with-current-buffer buf
+                  (setq-local noteworthy-project-root dir)
+                  (setq-local noteworthy-master-file noteworthy-master-file)
+                  (typst-preview-start t)
+                  ;; CHAIN: Setup PDF after preview starts (Lazy content loading handled inside)
+                  (noteworthy--setup-pdf-window editor-window pdf-file)
+                  ;; Restore focus immediately
+                  (when (window-live-p editor-window)
+                    (select-window editor-window))))))
+        ;; Else: No preview, run PDF setup immediately (Lazy content loading handled inside)
+        (noteworthy--setup-pdf-window editor-window pdf-file)
         (select-window editor-window))
 
       (message "Noteworthy initialized: %s" dir))))
