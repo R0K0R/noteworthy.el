@@ -112,30 +112,25 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
       (select-window editor-window)
       
       ;; 3. Start Typst Preview & Chain PDF Setup
-      ;; DISABLE AUTO-START to save memory (~3GB)
-      ;; (if (and (noteworthy-xwidget-available-p)
-      ;;          (fboundp 'typst-preview-start))
-      ;;     (let ((buf (current-buffer)))
-      ;;       ;; Start preview, then chain PDF setup
-      ;;       (run-with-timer 0.1 nil
-      ;;                       (lambda ()
-      ;;                         (when (buffer-live-p buf)
-      ;;                           (with-current-buffer buf
-      ;;                             (setq-local noteworthy-project-root dir)
-      ;;                             (setq-local noteworthy-master-file noteworthy-master-file)
-      ;;                             ;; (typst-preview-start t) ;; Disabled for memory
-      ;;                             ;; CHAIN: Setup PDF after preview starts
-      ;;                             (noteworthy--setup-pdf-window editor-window pdf-file)
-      ;;                             ;; FINAL: Restore focus
-      ;;                             (when (window-live-p editor-window)
-      ;;                               (select-window editor-window)))))))
-      ;;   ;; Else: No preview, run PDF setup immediately
-      ;;   (noteworthy--setup-pdf-window editor-window pdf-file)
-      ;;   (select-window editor-window))
-
-      ;; Default to just PDF setup for memory safety
-      (noteworthy--setup-pdf-window editor-window pdf-file)
-      (select-window editor-window)
+      (if (and (noteworthy-xwidget-available-p)
+               (fboundp 'typst-preview-start))
+          (let ((buf (current-buffer)))
+            ;; Start preview, then chain PDF setup
+            (run-with-timer 0.1 nil
+                            (lambda ()
+                              (when (buffer-live-p buf)
+                                (with-current-buffer buf
+                                  (setq-local noteworthy-project-root dir)
+                                  (setq-local noteworthy-master-file noteworthy-master-file)
+                                  (typst-preview-start t)
+                                  ;; CHAIN: Setup PDF after preview starts
+                                  (noteworthy--setup-pdf-window editor-window pdf-file)
+                                  ;; FINAL: Restore focus
+                                  (when (window-live-p editor-window)
+                                    (select-window editor-window)))))))
+        ;; Else: No preview, run PDF setup immediately
+        (noteworthy--setup-pdf-window editor-window pdf-file)
+        (select-window editor-window))
 
       (message "Noteworthy initialized: %s" dir))))
 
