@@ -5,7 +5,19 @@
 (require 'noteworthy-preview)
 (require 'vterm)
 
-
+(defun noteworthy--enforce-treemacs-root ()
+  "Force Treemacs to display `noteworthy-project-root` exclusively.
+Call this after any operation that might cause Treemacs to switch roots.
+Includes safety guards to prevent errors if Treemacs isn't ready."
+  (when (and (bound-and-true-p noteworthy-project-root)
+             (file-directory-p noteworthy-project-root))
+    (let ((treemacs-win (treemacs-get-local-window)))
+      (when treemacs-win
+        (with-selected-window treemacs-win
+          (let ((default-directory noteworthy-project-root))
+            (condition-case err
+                (treemacs-add-and-display-current-project-exclusively)
+              (error (message "Noteworthy: Could not re-enforce Treemacs root: %s" err)))))))))
 
 ;; Helper to setup PDF window
 (defun noteworthy--setup-pdf-window (editor-window pdf-file)
@@ -131,6 +143,9 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
         ;; Else: No preview, run PDF setup immediately
         (noteworthy--setup-pdf-window editor-window pdf-file)
         (select-window editor-window))
+
+      ;; Re-enforce Treemacs root after everything settles (handles both paths)
+      (run-with-timer 1.0 nil #'noteworthy--enforce-treemacs-root)
 
       (message "Noteworthy initialized: %s" dir))))
 
