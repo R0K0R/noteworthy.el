@@ -9,6 +9,86 @@ Uses xwidget if available, otherwise falls back to default external browser."
       (setq typst-preview-browser "xwidget")
     (setq typst-preview-browser "default")))
 
+(defcustom noteworthy-preview-repaint-method 'js
+  "How to make the preview xwidget repaint.
+
+Emacs only blits an xwidget when its window is touched, so a preview that
+has just recompiled sits stale until the mouse crosses it.  xwidget.el has
+no damage-to-redisplay path, so there is nothing to configure -- the page
+has to be asked to produce a new frame.
+
+`js\=' nudges the page itself (scroll a pixel and back, plus a throwaway
+transform): ~0.01ms, and it yields a genuinely new frame.
+`light\=' only marks the window dirty and redisplays: free, but Emacs will
+happily redraw the stale pixmap, so it often changes nothing.
+`resize\=' forces a full WebKit relayout: ~780ms per call on a remote
+preview -- enough to make typing stutter.  Last resort."
+  :type '(choice (const :tag "Nudge the page from JS (free)" js)
+                 (const :tag "Redisplay the window (free, often ineffective)" light)
+                 (const :tag "Resize the widget (slow, last resort)" resize))
+  :group 'noteworthy)
+
+(defcustom noteworthy-preview-repaint-interval 0.5
+  "Seconds between preview repaint ticks."
+  :type 'number
+  :group 'noteworthy)
+
+(defvar noteworthy-preview--repaint-timer nil)
+
+(defun noteworthy-preview--xwidget-windows ()
+  "Return (BUFFER . WINDOW) pairs for displayed webkit xwidgets."
+  (delq nil
+        (mapcar (lambda (buf)
+                  (when (string-match-p "xwidget-webkit" (buffer-name buf))
+                    (let ((win (get-buffer-window buf t)))
+                      (and win (cons buf win)))))
+                (buffer-list))))
+
+(defun noteworthy-preview-repaint ()
+  "Make the preview xwidget repaint now."
+  (interactive)
+  (dolist (pair (noteworthy-preview--xwidget-windows))
+    (let ((buf (car pair)) (win (cdr pair)))
+      (with-current-buffer buf
+        (let ((xw (ignore-errors (xwidget-webkit-current-session))))
+          (when xw
+            (pcase noteworthy-preview-repaint-method
+              ('js
+               (ignore-errors
+                 (xwidget-webkit-execute-script
+                  xw (concat "(function(){var e=document.scrollingElement||document.documentElement;"
+                             "var y=e.scrollTop;e.scrollTop=y+1;e.scrollTop=y;"
+                             "var b=document.body;if(b){b.style.transform='translateZ(0)';"
+                             "requestAnimationFrame(function(){b.style.transform='';});}})();"))))
+              ('resize
+               (let ((w (window-pixel-width win)) (h (window-pixel-height win)))
+                 (ignore-errors (xwidget-resize xw (max 1 (1- w)) h))
+                 (ignore-errors (xwidget-resize xw w h))))
+              (_ nil)))))
+      (force-window-update win)))
+  (when (memq noteworthy-preview-repaint-method '(light resize))
+    (redisplay t)))
+
+(defun noteworthy-preview--repaint-tick ()
+  "Repaint if a preview is on screen, otherwise do nothing."
+  (when (noteworthy-preview--xwidget-windows)
+    (noteworthy-preview-repaint)))
+
+;;;###autoload
+(define-minor-mode noteworthy-preview-repaint-mode
+  "Keep the preview xwidget repainting on its own.
+Without this the preview only updates when the mouse happens to cross it."
+  :global t
+  :group 'noteworthy
+  (when (timerp noteworthy-preview--repaint-timer)
+    (cancel-timer noteworthy-preview--repaint-timer)
+    (setq noteworthy-preview--repaint-timer nil))
+  (when noteworthy-preview-repaint-mode
+    (setq noteworthy-preview--repaint-timer
+          (run-with-timer noteworthy-preview-repaint-interval
+                          noteworthy-preview-repaint-interval
+                          #'noteworthy-preview--repaint-tick))))
+
 (defun noteworthy-xwidget-available-p ()
   "Return t if xwidget preview is available."
   (featurep 'xwidget-internal))
@@ -114,5 +194,10 @@ Safe version that works for both master and included files."
     (error (message "typst-preview error: %s" (error-message-string err)))))
 
 (noteworthy-preview-browser-setup)
+
+;; The preview cannot repaint itself; without this it only updates when the
+;; mouse happens to cross it.  A tick is a no-op when nothing is displayed.
+(when (featurep 'xwidget-internal)
+  (noteworthy-preview-repaint-mode 1))
 
 (provide 'noteworthy-preview)
