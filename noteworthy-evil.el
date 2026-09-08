@@ -101,6 +101,7 @@
       (kbd "<return>") #'noteworthy-typst-smart-newline
       "*" (lambda () (interactive) (noteworthy-typst-smart-pair ?*))
       "_" (lambda () (interactive) (noteworthy-typst-smart-pair ?_))
+      "\"" #'noteworthy-typst-smart-quote
       "$" #'noteworthy-typst-smart-dollar
       "`" #'noteworthy-typst-smart-backtick
       (kbd "DEL") #'noteworthy-typst-smart-backspace

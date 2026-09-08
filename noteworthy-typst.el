@@ -34,8 +34,14 @@ inside a formula the moment you typed the opening $."
                           n))))
       (or (cl-oddp (funcall unescaped ?$))      ; inside a formula
           (cl-oddp (funcall unescaped ?`))      ; inside raw
-          ;; a hash starts code and runs to the end of the expression
-          (string-match-p "#[A-Za-z0-9_.-]*\\'" before)))))
+          ;; A hash starts a code expression that runs to the end of the
+          ;; expression, so anything after it on the line is code -- unless a
+          ;; bracket appeared, which means either a content block (back to
+          ;; markup) or a call that has already closed.
+          (let ((hash (cl-position ?# before :from-end t)))
+            (and hash
+                 (let ((after (substring before (1+ hash))))
+                   (not (string-match-p "[][]" after)))))))))
 
 (defun noteworthy-typst-markup-context-p ()
   "Return t if point is in a Markup context.
@@ -202,6 +208,26 @@ fall back to the normal TAB behaviour."
     (backward-char 1))
    (t
     (insert char))))
+
+(defun noteworthy-typst-smart-quote ()
+  "Smart `\"' insertion.
+
+In math and code a quote is syntax -- \"...\" is literal text inside a
+formula, and a string in code -- so it pairs there regardless of what sits
+next to it.  smartparens refuses to pair when the next character is a word
+character, which is exactly the common case ($ \"|text\" $).
+
+In prose markup a quote is just a quote, so it stays a single character."
+  (interactive)
+  (cond
+   ;; type over the closing quote
+   ((eq (char-after) ?\")
+    (forward-char 1))
+   ((noteworthy-typst-markup-context-p)
+    (insert "\""))
+   (t
+    (insert "\"\"")
+    (backward-char 1))))
 
 (defun noteworthy-typst-smart-dollar ()
   "Smart $ insertion. Skip if on $, otherwise pair."
