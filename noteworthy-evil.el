@@ -105,7 +105,7 @@
       "`" #'noteworthy-typst-smart-backtick
       (kbd "DEL") #'noteworthy-typst-smart-backspace
       (kbd "<backspace>") #'noteworthy-typst-smart-backspace
-      (kbd "TAB") #'indent-for-tab-command
+      (kbd "TAB") #'noteworthy-typst-indent-line
       (kbd "<backtab>") #'noteworthy-typst-dedent-line)
     ;; Normal mode bindings
     (evil-define-key 'normal noteworthy-typst-mode-map

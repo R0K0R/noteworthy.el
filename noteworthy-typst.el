@@ -3,6 +3,7 @@
 ;;; Code:
 
 (require 'treesit)
+(require 'cl-lib)
 (require 'typst-ts-mode)
 
 (defvar noteworthy-typst-mode-map (make-sparse-keymap)
@@ -14,26 +15,57 @@
   :lighter " NW"
   :keymap noteworthy-typst-mode-map)
 
+(defun noteworthy-typst--incomplete-context-p ()
+  "Guess whether point is in math, code or raw when the AST cannot say.
+
+Half-typed constructs parse as ERROR nodes -- and while typing, that is
+most of the time -- so falling back to \"assume markup\" made * and _ pair
+inside a formula the moment you typed the opening $."
+  (save-excursion
+    (let* ((bol (line-beginning-position))
+           (before (buffer-substring-no-properties bol (point)))
+           (unescaped (lambda (ch)
+                        (let ((n 0) (i 0))
+                          (while (string-match (regexp-quote (string ch)) before i)
+                            (setq i (1+ (match-beginning 0)))
+                            (unless (and (> (match-beginning 0) 0)
+                                         (eq (aref before (1- (match-beginning 0))) ?\\))
+                              (setq n (1+ n))))
+                          n))))
+      (or (cl-oddp (funcall unescaped ?$))      ; inside a formula
+          (cl-oddp (funcall unescaped ?`))      ; inside raw
+          ;; a hash starts code and runs to the end of the expression
+          (string-match-p "#[A-Za-z0-9_.-]*\\'" before)))))
+
 (defun noteworthy-typst-markup-context-p ()
   "Return t if point is in a Markup context.
 Traverses up the AST:
 - Returns T if `content` or `source_file` is hit.
-- Returns NIL if `math`, `raw`, `string` is hit."
+- Returns NIL if `math`, `raw`, `string`, a code form or a label is hit.
+- Falls back to a textual guess when the parse is incomplete."
   (when (treesit-language-available-p 'typst)
     (let ((node (treesit-node-at (point)))
           (decision 'unknown))
       (while (and node (eq decision 'unknown))
         (let ((type (treesit-node-type node)))
           (cond
-           ((member type '("math" "equation" "raw_span" "raw_blck" "string" "comment"))
+           ((member type '("math" "equation" "formula" "raw_span" "raw_blck"
+                           "string" "comment" "label" "ref" "url"))
             (setq decision nil))
+           ;; A half-typed construct: the tree cannot tell us, so read the text.
+           ((equal type "ERROR")
+            (setq decision (if (noteworthy-typst--incomplete-context-p) nil t)))
            ((member type '("content" "source_file"))
             (setq decision t))
            ((member type '("let" "set" "show" "import" "include" "for" "while" "if" "return"
-                           "call" "field" "ident" "number" "bool" "none" "auto"))
+                           "call" "field" "ident" "number" "bool" "none" "auto" "code"))
             (setq decision nil))))
         (setq node (treesit-node-parent node)))
-      (or (eq decision t) (eq decision 'unknown)))))
+      (cond ((eq decision t) t)
+            ((null decision) nil)
+            ;; Nothing matched at all -- still prefer the textual reading over
+            ;; blindly assuming markup.
+            (t (not (noteworthy-typst--incomplete-context-p)))))))
 
 (defun noteworthy-typst-get-list-marker ()
   "Return the list prefix if on a list line, or nil."
@@ -130,8 +162,25 @@ otherwise falls back to `tab-width` or 2 spaces."
   (interactive)
   (save-excursion
     (beginning-of-line)
-    (when (looking-at "^  ")
-      (delete-char 2))))
+    (let ((unit (length (noteworthy-typst-get-indent-unit))))
+      (when (looking-at (format "^ \\{%d\\}" unit))
+        (delete-char unit)))))
+
+(defun noteworthy-typst-indent-line ()
+  "Indent the current line by one level when it is a list item.
+
+Typst nests lists by indentation, so TAB on a `-\=', `+\=' or `1.\=' line
+should shift the whole item -- `indent-for-tab-command\=' does not, since
+typst-ts-mode has no indentation rule that applies here.  Anywhere else,
+fall back to the normal TAB behaviour."
+  (interactive)
+  (if (noteworthy-typst-get-list-marker)
+      (save-excursion
+        (beginning-of-line)
+        (insert (noteworthy-typst-get-indent-unit)))
+    (call-interactively (if (bound-and-true-p indent-for-tab-command)
+                            #'indent-for-tab-command
+                          #'indent-for-tab-command))))
 
 (defun noteworthy-typst-smart-space ()
   "Insert space. If between $$, expand to $ $."
