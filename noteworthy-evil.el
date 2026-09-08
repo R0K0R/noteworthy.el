@@ -107,7 +107,34 @@
       (kbd "DEL") #'noteworthy-typst-smart-backspace
       (kbd "<backspace>") #'noteworthy-typst-smart-backspace
       (kbd "TAB") #'noteworthy-typst-indent-line
-      (kbd "<backtab>") #'noteworthy-typst-dedent-line)
+      (kbd "<backtab>") #'noteworthy-typst-dedent-line
+      ;; Evil's insert state map shadows the plain mode map, so ) has to be
+      ;; bound here too or the literal insertion keeps winning.
+      ")" #'noteworthy-typst-close-paren
+      "]" #'noteworthy-typst-close-bracket
+      "}" #'noteworthy-typst-close-brace
+      (kbd "C-)") #'noteworthy-typst-insert-close-paren
+      (kbd "C-]") #'noteworthy-typst-insert-close-bracket
+      (kbd "C-}") #'noteworthy-typst-insert-close-brace)
+
+    ;; $...$ as a text object, so ci$ / ya$ / di$ work the way they do on
+    ;; brackets.  These are evil's global inner/outer maps -- $ has no default
+    ;; binding in either, so this only adds.
+    (evil-define-text-object noteworthy-evil-inner-dollar (count &optional beg end type)
+      "Select the contents of the surrounding $...$."
+      (let ((b (noteworthy-typst-dollar-bounds)))
+        (unless b (user-error "Not inside $...$"))
+        (evil-range (1+ (car b)) (cdr b))))
+
+    (evil-define-text-object noteworthy-evil-a-dollar (count &optional beg end type)
+      "Select the surrounding $...$, delimiters included."
+      (let ((b (noteworthy-typst-dollar-bounds)))
+        (unless b (user-error "Not inside $...$"))
+        (evil-range (car b) (1+ (cdr b)))))
+
+    (define-key evil-inner-text-objects-map "$" #'noteworthy-evil-inner-dollar)
+    (define-key evil-outer-text-objects-map "$" #'noteworthy-evil-a-dollar)
+
     ;; Normal mode bindings
     (evil-define-key 'normal noteworthy-typst-mode-map
       "o" #'noteworthy-typst-smart-o
@@ -124,11 +151,20 @@
       (kbd "M-o") #'noteworthy-typst-send-position)
 
 
+    ;; Structure editing on the home row.  Bound here as well as in the plain
+    ;; mode map because evil's state maps shadow it.
+    (evil-define-key '(normal insert) noteworthy-typst-mode-map
+      (kbd "M-l") #'noteworthy-typst-demote
+      (kbd "M-h") #'noteworthy-typst-promote
+      (kbd "M-j") #'noteworthy-typst-move-line-down
+      (kbd "M-k") #'noteworthy-typst-move-line-up
+      (kbd "M-<return>") #'noteworthy-typst-meta-return
+      (kbd "M-RET") #'noteworthy-typst-meta-return)
+
     ;; Remote PDF Scrolling (Alt+Shift+hjkl)
     (evil-define-key '(normal insert) noteworthy-typst-mode-map
       (kbd "M-J") (lambda () (interactive) (noteworthy-pdf-scroll 'down))
       (kbd "M-K") (lambda () (interactive) (noteworthy-pdf-scroll 'up))
-      (kbd "M-H") (lambda () (interactive) (noteworthy-pdf-scroll 'left))
       (kbd "M-H") (lambda () (interactive) (noteworthy-pdf-scroll 'left))
       (kbd "M-L") (lambda () (interactive) (noteworthy-pdf-scroll 'right))
       

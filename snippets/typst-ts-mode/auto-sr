@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: squared (glued)
+# key: sr
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+^2$0

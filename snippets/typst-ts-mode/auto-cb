@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: cubed
+# key: cb
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+^3$0

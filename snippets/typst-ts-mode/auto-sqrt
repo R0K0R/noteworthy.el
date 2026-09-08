@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: square root
+# key: sq;
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+sqrt(${1:x})$0

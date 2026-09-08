@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: nth partial derivative
+# key: pdvn;
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+(partial^${3:n} ${1:f})/(partial ${2:x}^$3) $0

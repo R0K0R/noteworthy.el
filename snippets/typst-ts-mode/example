@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: example block
+# key: exa
+# group: blocks
+# condition: (noteworthy-typst-in 'markup)
+# --
+#example("${1:Title}")[
+  $0
+]

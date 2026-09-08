@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: sum with bounds
+# key: sum;
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+sum_(${1:i=1})^(${2:n}) $0

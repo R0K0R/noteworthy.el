@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: named equation block
+# key: eqn
+# group: blocks
+# condition: (noteworthy-typst-in 'markup)
+# --
+#equation("${1:Title}")[
+  $0
+]

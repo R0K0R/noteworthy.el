@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: let binding
+# key: let
+# group: structure
+# condition: (noteworthy-typst-in 'markup)
+# --
+#let ${1:name} = ${0:value}

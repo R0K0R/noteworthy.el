@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: let function
+# key: fn
+# group: structure
+# condition: (noteworthy-typst-in 'markup)
+# --
+#let ${1:name}(${2:args}) = {
+  $0
+}

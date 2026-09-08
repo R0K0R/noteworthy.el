@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: display math
+# key: dm
+# group: math
+# condition: (noteworthy-typst-in 'markup)
+# --
+\$ $0 \$

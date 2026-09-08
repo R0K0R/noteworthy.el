@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: product
+# key: prod
+# group: math (auto)
+# condition: (noteworthy-typst-auto-word 'math)
+# --
+product

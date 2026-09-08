@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: limit (block)
+# key: lim;
+# group: math (auto)
+# condition: (and (eq (noteworthy-typst-math-kind) 'block) (noteworthy-typst-auto 'math))
+# --
+lim_(${1:n} -> ${2:oo}) $0

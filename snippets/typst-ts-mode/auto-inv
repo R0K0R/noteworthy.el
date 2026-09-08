@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: inverse
+# key: inv
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+^(-1)$0

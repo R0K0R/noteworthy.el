@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: vector
+# key: vec;
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+vec(${1:a}, ${2:b})$0

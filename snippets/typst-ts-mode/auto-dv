@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: derivative
+# key: dv;
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+(dif ${1:y})/(dif ${2:x}) $0

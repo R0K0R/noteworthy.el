@@ -1,0 +1,10 @@
+# -*- mode: snippet -*-
+# name: matrix (auto)
+# key: mat;
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+mat(
+  ${1:a}, ${2:b};
+  ${3:c}, ${4:d}
+)$0

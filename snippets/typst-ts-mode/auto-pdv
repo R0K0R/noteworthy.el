@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: partial derivative
+# key: pdv;
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+(partial ${1:f})/(partial ${2:x}) $0

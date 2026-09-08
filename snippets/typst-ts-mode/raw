@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: code block
+# key: src
+# group: structure
+# condition: (noteworthy-typst-in 'markup)
+# --
+```${1:typst}
+$0
+```

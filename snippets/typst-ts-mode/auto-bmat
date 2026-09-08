@@ -1,0 +1,10 @@
+# -*- mode: snippet -*-
+# name: bracketed matrix
+# key: bmat;
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+bmat(
+  ${1:a}, ${2:b};
+  ${3:c}, ${4:d}
+)$0

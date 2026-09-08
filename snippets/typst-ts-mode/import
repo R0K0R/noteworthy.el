@@ -1,0 +1,8 @@
+# -*- mode: snippet -*-
+# name: import
+# key: imp
+# group: structure
+# condition: (noteworthy-typst-in 'markup)
+# --
+#import "${1:path.typ}": ${2:*}
+$0

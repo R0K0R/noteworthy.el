@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: absolute value
+# key: abs;
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+abs(${1:x})$0

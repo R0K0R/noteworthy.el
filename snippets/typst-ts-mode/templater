@@ -1,0 +1,11 @@
+# -*- mode: snippet -*-
+# name: templater import header
+# key: nw
+# group: structure
+# condition: (noteworthy-typst-in 'markup)
+# --
+#import "../../templates/templater.typ": *
+
+= ${1:Page Title}
+
+$0

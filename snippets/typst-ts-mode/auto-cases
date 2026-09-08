@@ -1,0 +1,10 @@
+# -*- mode: snippet -*-
+# name: cases (auto)
+# key: cases;
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+cases(
+  ${1:x} & "if" ${2:cond},
+  ${3:y} & "otherwise"
+)$0

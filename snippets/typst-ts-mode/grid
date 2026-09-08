@@ -1,0 +1,11 @@
+# -*- mode: snippet -*-
+# name: grid
+# key: grid
+# group: structure
+# condition: (noteworthy-typst-in 'markup)
+# --
+#grid(
+  columns: (${1:1fr, 1fr}),
+  gutter: ${2:1em},
+  $0
+)

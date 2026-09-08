@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: analysis block
+# key: ana
+# group: blocks
+# condition: (noteworthy-typst-in 'markup)
+# --
+#analysis("${1:Title}")[
+  $0
+]

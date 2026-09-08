@@ -31,6 +31,7 @@ If nil, defaults to 35% of the frame width."
 (require 'noteworthy-typst)
 (require 'noteworthy-preview)
 (require 'noteworthy-layout)
+(require 'noteworthy-snippets)
 
 (with-eval-after-load 'evil
   (require 'noteworthy-evil))

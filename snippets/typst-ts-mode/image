@@ -1,0 +1,11 @@
+# -*- mode: snippet -*-
+# name: figure with image
+# key: img
+# group: structure
+# condition: (noteworthy-typst-in 'markup)
+# --
+#figure(
+  image("${1:images/file.png}", width: ${2:80%}),
+  caption: [${3:Caption}],
+)
+$0

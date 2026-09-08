@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: norm
+# key: norm;
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+norm(${1:x})$0

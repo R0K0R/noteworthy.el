@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: nth derivative
+# key: dvn;
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+(dif^${3:n} ${1:y})/(dif ${2:x}^$3) $0
