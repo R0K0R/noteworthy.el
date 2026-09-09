@@ -330,8 +330,12 @@ Runs from `post-self-insert-hook\='."
     ;; `noteworthy-typst-dedent-line\=' matches leading spaces, and a tab
     ;; landing in a shared buffer is churn the bridge has to carry.
     (setq-local indent-tabs-mode nil)
+    ;; Depth 90 so this runs AFTER smartparens' handler.  Expanding first
+    ;; leaves sp looking at a buffer where our snippet has just inserted a
+    ;; `(', which it then auto-pairs -- `lim;' became `lim_() -> oo)', an
+    ;; unbalanced paren that looked for all the world like a bad snippet.
     (add-hook 'post-self-insert-hook
-              #'noteworthy-snippets-maybe-auto-expand nil t)))
+              #'noteworthy-snippets-maybe-auto-expand 90 t)))
 
 (add-hook 'noteworthy-typst-mode-hook #'noteworthy-snippets-setup)
 
