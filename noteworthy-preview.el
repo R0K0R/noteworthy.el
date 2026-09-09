@@ -1,9 +1,10 @@
 ;;; noteworthy-preview.el --- Preview abstraction for Noteworthy  -*- lexical-binding: t; -*-
 
 (require 'typst-preview)
-;; `with-lsp-workspace' is a macro: it has to be available when this file is
-;; compiled, or the call is left as a function call and fails at runtime.
-(eval-when-compile (require 'lsp-mode nil t))
+;; Deliberately NOT `with-lsp-workspace': a macro must be available at
+;; byte-compile time or the call is left as a function call and dies at runtime.
+;; It is just a let on `lsp--cur-workspace', so bind that and need no macro.
+(defvar lsp--cur-workspace)
 
 (defun noteworthy-preview-browser-setup ()
   "Configure preview browser based on system capabilities.
@@ -229,7 +230,7 @@ The preview pane itself visits no file, so fall back to the last .typ one."
                    (expand-file-name "templates/core/parser.typ" root))))
     (unless ws (user-error "No tinymist LSP -- open a .typ file in the project"))
     (let ((lsp-response-timeout 30))
-      (with-lsp-workspace ws
+      (let ((lsp--cur-workspace ws))
         (lsp-request "workspace/executeCommand"
                      (list :command "tinymist.doStartPreview"
                            :arguments
@@ -254,7 +255,7 @@ Safe version that works for both master and included files."
        ;; Prefer the LSP: no second tinymist, and it works from a buffer whose
        ;; own server has not started yet.
        ((noteworthy-preview--tinymist-workspace)
-        (with-lsp-workspace (noteworthy-preview--tinymist-workspace)
+        (let ((lsp--cur-workspace (noteworthy-preview--tinymist-workspace)))
           (lsp-request-async
            "workspace/executeCommand"
            (list :command "tinymist.scrollPreview"
