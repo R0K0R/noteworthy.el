@@ -1,6 +1,9 @@
 ;;; noteworthy-preview.el --- Preview abstraction for Noteworthy  -*- lexical-binding: t; -*-
 
 (require 'typst-preview)
+;; `with-lsp-workspace' is a macro: it has to be available when this file is
+;; compiled, or the call is left as a function call and fails at runtime.
+(eval-when-compile (require 'lsp-mode nil t))
 
 (defun noteworthy-preview-browser-setup ()
   "Configure preview browser based on system capabilities.
@@ -166,12 +169,104 @@ Without this the preview only updates when the mouse happens to cross it."
 
 (advice-add 'typst-preview--parse-message :around #'noteworthy-safe-parse-message)
 
+;;; LSP-hosted preview -------------------------------------------------------
+;; typst-preview.el spawns its own tinymist and talks to it over a websocket.
+;; When tinymist is already running as the LSP there is no reason for a second
+;; one, and the websocket masters are exactly what made M-o unreliable: the
+;; scroll only worked once a master had been established for that file.
+;; tinymist.scrollPreview names the file in the event, so any workspace can
+;; carry it.
+
+(declare-function lsp-workspaces "lsp-mode")
+(declare-function lsp-request "lsp-mode" (method params &rest args))
+(declare-function lsp-request-async "lsp-mode" (method params callback &rest args))
+(declare-function lsp--session-workspaces "lsp-mode" (session))
+(declare-function lsp--workspace-server-id "lsp-mode" (workspace))
+(declare-function lsp-session "lsp-mode")
+
+(defcustom noteworthy-preview-data-port 23627
+  "Port for the LSP-hosted preview's data plane."
+  :type 'integer :group 'noteworthy)
+
+(defcustom noteworthy-preview-control-port 23628
+  "Port for the LSP-hosted preview's control plane."
+  :type 'integer :group 'noteworthy)
+
+(defvar noteworthy-preview-id "default_preview"
+  "Task id tinymist gives the preview started by `noteworthy-preview-start'.")
+
+(defun noteworthy-preview--tinymist-workspace ()
+  "A live tinymist workspace, whatever buffer we are called from.
+Not `lsp-workspaces' alone: a just-opened content file has none yet, and
+that is precisely when M-o used to do nothing."
+  (or (car (ignore-errors (lsp-workspaces)))
+      (seq-find (lambda (w)
+                  (string-match-p "tinymist"
+                                  (format "%s" (lsp--workspace-server-id w))))
+                (ignore-errors (lsp--session-workspaces (lsp-session))))))
+
+(defun noteworthy-preview--source-buffer ()
+  "The buffer whose point the preview should follow.
+The preview pane itself visits no file, so fall back to the last .typ one."
+  (if buffer-file-name
+      (current-buffer)
+    (seq-find (lambda (b)
+                (let ((f (buffer-local-value 'buffer-file-name b)))
+                  (and f (string-suffix-p ".typ" f))))
+              (buffer-list))))
+
+;;;###autoload
+(defun noteworthy-preview-start ()
+  "Start the preview in the tinymist that is already running as the LSP."
+  (interactive)
+  (let* ((ws (noteworthy-preview--tinymist-workspace))
+         (root (or (bound-and-true-p noteworthy-project-root)
+                   (when-let* ((d (locate-dominating-file
+                                   (or default-directory "") "noteworthy.py")))
+                     (expand-file-name d))
+                   default-directory))
+         (main (or (bound-and-true-p noteworthy-master-file)
+                   (expand-file-name "templates/core/parser.typ" root))))
+    (unless ws (user-error "No tinymist LSP -- open a .typ file in the project"))
+    (let ((lsp-response-timeout 30))
+      (with-lsp-workspace ws
+        (lsp-request "workspace/executeCommand"
+                     (list :command "tinymist.doStartPreview"
+                           :arguments
+                           (vector (vector "--data-plane-host"
+                                           (format "127.0.0.1:%d" noteworthy-preview-data-port)
+                                           "--control-plane-host"
+                                           (format "127.0.0.1:%d" noteworthy-preview-control-port)
+                                           "--invert-colors" "never"
+                                           "--root" (directory-file-name root)
+                                           main)))))
+      (message "Preview hosted on port %d" noteworthy-preview-data-port))))
+
 (defun noteworthy-typst-send-position ()
   "Send current position to typst preview (jump to source).
 Safe version that works for both master and included files."
   (interactive)
+  (let ((src (noteworthy-preview--source-buffer)))
+    (unless src (user-error "No Typst buffer to scroll from"))
+    (unless (eq src (current-buffer)) (set-buffer src)))
   (condition-case err
       (cond
+       ;; Prefer the LSP: no second tinymist, and it works from a buffer whose
+       ;; own server has not started yet.
+       ((noteworthy-preview--tinymist-workspace)
+        (with-lsp-workspace (noteworthy-preview--tinymist-workspace)
+          (lsp-request-async
+           "workspace/executeCommand"
+           (list :command "tinymist.scrollPreview"
+                 :arguments (vector noteworthy-preview-id
+                                    (list :event "panelScrollTo"
+                                          :filepath (file-truename buffer-file-name)
+                                          :line (1- (line-number-at-pos))
+                                          :character (max 0 (- (point) (line-beginning-position))))))
+           #'ignore :mode 'detached
+           :error-handler (lambda (e) (message "Preview scroll refused: %s" e))))
+        (message "Preview -> %s:%d" (file-name-nondirectory buffer-file-name)
+                 (line-number-at-pos)))
        ((and (boundp 'typst-preview--local-master)
              typst-preview--local-master
              (fboundp 'typst-preview--master-socket)
