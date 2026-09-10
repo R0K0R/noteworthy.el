@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: Without loss of generality
+# key: Wlog
+# group: prose
+# condition: (noteworthy-typst-in 'markup)
+# --
+Without loss of generality

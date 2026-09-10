@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: QED spelled out
+# key: qed;
+# group: prose (auto)
+# condition: (noteworthy-typst-auto 'markup)
+# --
+Q.E.D.

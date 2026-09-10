@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: QED square
+# key: qed
+# group: prose
+# condition: (noteworthy-typst-in 'markup)
+# --
+#sym.square.filled

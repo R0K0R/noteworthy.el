@@ -1,0 +1,10 @@
+# -*- mode: snippet -*-
+# name: matrix (norm)
+# key: Vmat
+# group: math
+# condition: (noteworthy-typst-in 'math)
+# --
+mat(delim: bar.double,
+  ${1:a}, ${2:b};
+  ${3:c}, ${4:d}
+)$0

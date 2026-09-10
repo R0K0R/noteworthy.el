@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: such that
+# key: st
+# group: prose
+# condition: (noteworthy-typst-in 'markup)
+# --
+such that
