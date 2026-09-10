@@ -163,6 +163,11 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; @a -> alpha.  Typst spells the greek letters out, so this is purely
     ;; keystrokes; the table is the rule's own business.
     (:trigger "@\\([A-Za-z]\\)" :expand noteworthy-snippets-greek :in (math))
+    ;; `alpha 1\=' -> `alpha_1\='.  The rule above only sees a single letter
+    ;; against the digit, which caught `alpha1\=' back when `@a\=' expanded
+    ;; without a trailing space.  Now that it ends with one, subscripting a
+    ;; spelled-out greek letter has to step over that space.
+    (:trigger "\\(${GREEK}\\) \\(${DIGIT}\\)" :expand "\\1_\\2" :in (math))
     ;; A digit or letter run raised or lowered as a group: x_12 -> x_(12)
     (:trigger "\\(${LETTER}\\)_\\(${DIGIT}${DIGIT}+\\)" :expand "\\1_(\\2)" :in (math))
     ;; Postfix accents: xhat -> hat(x).  Typst has no postfix form, so the
@@ -228,8 +233,13 @@ Each rule is a plist:
   "Single-letter shorthands for the Typst names of the greek letters.")
 
 (defun noteworthy-snippets-greek (groups)
-  "Expand the letter captured in GROUPS to a Typst greek letter name."
-  (cdr (assoc (car groups) noteworthy-snippets--greek)))
+  "Expand the letter captured in GROUPS to a Typst greek letter name.
+
+Trailing space included: Typst spells these out, so `alpha\=' run against
+whatever you type next is a different identifier -- `@ab\=' would have to
+become `alphab\='.  The space is the separator you would type anyway."
+  (when-let* ((name (cdr (assoc (car groups) noteworthy-snippets--greek))))
+    (concat name " ")))
 
 (defconst noteworthy-snippets--accents
   '(("ddot" . "dot.double") ("dot" . "dot") ("hat" . "hat") ("bar" . "bar")
