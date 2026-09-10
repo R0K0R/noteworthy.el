@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: sum with bounds (inline)
+# key: sum;
+# group: math (auto)
+# condition: (and (not (eq (noteworthy-typst-math-kind) 'block)) (noteworthy-typst-auto 'math))
+# --
+limits(sum)_(${1:i=1})^(${2:n}) $0

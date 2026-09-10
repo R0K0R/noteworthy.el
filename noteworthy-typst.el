@@ -254,6 +254,23 @@ otherwise falls back to `tab-width` or 2 spaces."
                    2)
                ?\s))
 
+(defun noteworthy-typst--exit-indent ()
+  "Indentation for the line that ends a list.
+
+A list ends back in whatever encloses it: the body of a content block or
+call when there is one, otherwise the left margin.  Carrying the item\='s
+own indentation across is what left every following line indented once
+the list was over -- and since the default branch of
+`noteworthy-typst-smart-newline\=' copies the current line\='s indent, that
+then propagated to every line after it."
+  (let ((opens (noteworthy-typst--unclosed-openers)))
+    (if (null opens)
+        ""
+      (save-excursion
+        (goto-char (car opens))
+        (concat (noteworthy-typst-get-current-indent)
+                (noteworthy-typst-get-indent-unit))))))
+
 (defun noteworthy-typst-smart-newline ()
   "Handle newlines with smart indent detection."
   (interactive)
@@ -297,13 +314,19 @@ otherwise falls back to `tab-width` or 2 spaces."
      ;; Lists are NOT continued here: `noteworthy-typst-meta-return' (M-RET)
      ;; owns that, following org, where RET is a plain newline.  An empty list
      ;; item is still cleaned up, since that is how you end a list.
+     ;; `noteworthy-typst-get-list-marker' is deliberately NOT consulted: it
+     ;; requires whitespace after the marker, so an empty item -- `+' alone,
+     ;; which is exactly how you end a list -- did not look like a list line
+     ;; at all.  This branch never fired, the item survived, and the default
+     ;; branch below carried its indentation into every line that followed.
      ((and (eolp)
-           (noteworthy-typst-get-list-marker)
            (save-excursion (beginning-of-line)
                            (looking-at-p "^[ \t]*\\([-+*]\\|[0-9]+\\.\\)[ \t]*$")))
       (beginning-of-line)
       (delete-region (point) (line-end-position))
-      (newline-and-indent))
+      ;; Not `newline-and-indent': that re-indents to the list we are leaving.
+      (newline)
+      (insert (noteworthy-typst--exit-indent)))
 
      ;; Inside brackets - maintain current indent
      ((save-excursion
