@@ -132,6 +132,27 @@ nested in.  `$ sqrt(x) $\=' parses as call > formula > math, and treating
 wrapper -- `code\=' encloses every statement form anyway, and a `content\='
 block inside a call correctly lands back in markup.")
 
+(defun noteworthy-typst--let-redisplay-claim-ranges ()
+  "Let redisplay learn what a pending edit reparented, before we reparse.
+
+`treesit-parser-changed-regions\=' forces a reparse and reports what moved,
+and returns nil when the tree is already current.  Redisplay calls it, via
+`treesit--pre-redisplay\=', to decide what needs refontifying -- and what
+needs it is often far more than the text typed on.
+
+Asking tree-sitter anything forces that same reparse.  The pairing gate
+and every snippet condition do exactly that, from `post-self-insert-hook\=':
+after the insert, before redisplay.  So we consumed the answer and
+redisplay got nil.  The edit itself lands fine; only the faces go stale,
+across whatever the edit reparented.  Typing a `(\=' inside a cetz block
+reparents everything after it, so the visible region froze in the
+previous tree\='s reading of it -- text correct, highlighting wrong.
+
+Run the marker first and redisplay gets its ranges either way; our reparse
+then costs nothing, the tree being current by the time we ask."
+  (when (fboundp 'treesit--pre-redisplay)
+    (ignore-errors (treesit--pre-redisplay))))
+
 (defun noteworthy-typst-context ()
   "Return the syntactic context at point as a symbol.
 
@@ -141,6 +162,7 @@ undecidable tree, or a missing grammar fall back to reading the text.
 
 This is the single source of truth for the pairing gate and for the
 `# condition:\=' of every snippet that ships with Noteworthy."
+  (noteworthy-typst--let-redisplay-claim-ranges)
   (if (not (treesit-language-available-p 'typst))
       (noteworthy-typst--textual-context)
     (let ((node (treesit-node-at (point)))
