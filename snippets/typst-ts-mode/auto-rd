@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: raise to a power (glued)
+# key: rd
+# group: math (auto)
+# condition: (noteworthy-typst-auto 'math)
+# --
+^$0
