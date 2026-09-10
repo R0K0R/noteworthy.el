@@ -117,6 +117,11 @@
       (kbd "C-]") #'noteworthy-typst-insert-close-bracket
       (kbd "C-}") #'noteworthy-typst-insert-close-brace)
 
+    ;; `p' still pastes text; it only diverts when the clipboard actually
+    ;; holds an image, so the key keeps its ordinary meaning.
+    (evil-define-key 'normal noteworthy-typst-mode-map
+      "p" #'noteworthy-image-paste-or-yank)
+
     ;; $...$ as a text object, so ci$ / ya$ / di$ work the way they do on
     ;; brackets.  These are evil's global inner/outer maps -- $ has no default
     ;; binding in either, so this only adds.
