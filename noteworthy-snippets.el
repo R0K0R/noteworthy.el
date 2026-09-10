@@ -180,6 +180,14 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; delimiter means only a d followed by exactly one letter can match, so
     ;; every one of those is safe: they are three letters or more by the time
     ;; a delimiter arrives.  It is put back by \\2.
+    ;; Partials, the same two shapes as the differentials below and listed
+    ;; first for being the longer key.  They cannot actually collide: the
+    ;; `d\=' rules need a non-alphanumeric in front of the d, and `pd\=' puts a
+    ;; p there.
+    (:trigger "\\(^\\|[^[:alnum:]_-]\\)pd\\(${LETTER}\\)\\([ ,)]\\)"
+     :expand "\\1partial \\2\\3" :in (math))
+    (:trigger "\\(^\\|[^[:alnum:]_-]\\)pd\\(${LETTER}\\);"
+     :expand "\\1(partial \\2)" :in (math))
     ;; The boundary is spelled out rather than written `\\b\=': `$\=' has word
     ;; syntax in the standard table, so `$dx\=' reads as one word and `\\b\='
     ;; never matches after the dollar -- the differential at the very start
