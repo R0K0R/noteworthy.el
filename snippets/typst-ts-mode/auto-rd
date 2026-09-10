@@ -4,4 +4,4 @@
 # group: math (auto)
 # condition: (noteworthy-typst-auto 'math)
 # --
-^$0
+^($1)$0
