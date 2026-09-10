@@ -44,6 +44,37 @@
   (define-key map (kbd "C-]")        #'noteworthy-typst-insert-close-bracket)
   (define-key map (kbd "C-}")        #'noteworthy-typst-insert-close-brace))
 
+(defun noteworthy-typst--unclosed-openers ()
+  "Positions of the unclosed `(\=', `[\=' and `{\=' before point, innermost first.
+Nil inside a string or a comment, where brackets are not structure."
+  (let ((ppss (syntax-ppss)))
+    (unless (or (nth 3 ppss) (nth 4 ppss))
+      (reverse (nth 9 ppss)))))
+
+(defun noteworthy-typst--bracket-context ()
+  "Context implied by the brackets still open around point, or nil.
+
+Reading only the current line loses the `#\=' the moment a call spans
+lines -- which is the ordinary shape of a cetz canvas:
+
+  #canvas.cartesian-canvas(
+    shape.line((1, 0), (1, 1), style: (stroke: (dash: \"dashed\"))),
+
+By the time point is on the `dash:\=' line the `#\=' is four lines up, the
+half-typed call is one big ERROR node so the AST cannot settle it either,
+and the fallback called that markup -- where a quote does not pair."
+  (let ((opens (noteworthy-typst--unclosed-openers)))
+    (when opens
+      (if (eq (char-after (car opens)) ?\[)
+          ;; A content block puts point back in markup no matter how much
+          ;; code encloses it -- `#figure(caption: [a |quote here])\='.
+          'markup
+        (let* ((outer (car (last opens)))
+               (before (buffer-substring-no-properties
+                        (save-excursion (goto-char outer) (line-beginning-position))
+                        outer)))
+          (when (string-match-p "#" before) 'code))))))
+
 (defun noteworthy-typst--textual-context ()
   "Guess the context at point by reading the line before it.
 
@@ -66,6 +97,9 @@ Returns `math\=', `raw\=', `code\=' or `markup\='."
       (cond
        ((cl-oddp (funcall unescaped ?$)) 'math)     ; inside a formula
        ((cl-oddp (funcall unescaped ?`)) 'raw)      ; inside raw
+       ;; Brackets first: they are the only thing that still reads correctly
+       ;; once the construct spans lines.
+       ((noteworthy-typst--bracket-context))
        ;; A hash starts a code expression that runs to the end of the
        ;; expression, so anything after it on the line is code -- unless a
        ;; bracket appeared, which means either a content block (back to
