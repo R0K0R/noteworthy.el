@@ -172,7 +172,27 @@ The LaTeX Suite equivalent of its snippet variables."
      :expand noteworthy-snippets-accent :in (math))
     ;; Postfix styles: bbR -> bb(R).  The captured name is the function.
     (:trigger "\\(bb\\|cal\\|frak\\|bold\\|upright\\|sans\\|mono\\)\\(${LETTER}\\)"
-     :expand "\\1(\\2)$0" :in (math)))
+     :expand "\\1(\\2)$0" :in (math))
+    ;; Differentials: `dx ' -> `dif x '.  The delimiter is part of the
+    ;; trigger, and that is the whole trick.  Firing on the letter instead
+    ;; would expand the moment you typed the second character of `det',
+    ;; `dim', `dots' or `delta' -- and of `dif' itself.  Waiting for the
+    ;; delimiter means only a d followed by exactly one letter can match, so
+    ;; every one of those is safe: they are three letters or more by the time
+    ;; a delimiter arrives.  It is put back by \\2.
+    ;; The boundary is spelled out rather than written `\\b\=': `$\=' has word
+    ;; syntax in the standard table, so `$dx\=' reads as one word and `\\b\='
+    ;; never matches after the dollar -- the differential at the very start
+    ;; of a formula, which is where it most often sits.  Group 1 is that
+    ;; boundary character, put straight back.
+    (:trigger "\\(^\\|[^[:alnum:]_-]\\)d\\(${LETTER}\\)\\([ ,)]\\)"
+     :expand "\\1dif \\2\\3" :in (math))
+    ;; `dx;' -> `(dif x)', for where the differential needs bracketing --
+    ;; inside a fraction or under a power.  `dv;' and friends already build
+    ;; the whole derivative, and being keyed they are tried first, so `dv;'
+    ;; stays the fraction and only the other letters reach this rule.
+    (:trigger "\\(^\\|[^[:alnum:]_-]\\)d\\(${LETTER}\\);"
+     :expand "\\1(dif \\2)" :in (math)))
   "Regex auto-expansions, tried in order after the keyed snippets.
 
 Each rule is a plist:
