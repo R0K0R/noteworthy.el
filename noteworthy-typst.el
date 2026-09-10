@@ -519,7 +519,13 @@ not the one point is in."
   (if-let* ((end (and noteworthy-typst-close-delimiter-tabout
                      (noteworthy-typst--enclosing-end open))))
       (goto-char end)
-    (insert (char-to-string close))))
+    (insert (char-to-string close))
+    ;; Give the expander its chance, as a keypress would.  Called directly
+    ;; rather than by switching to `self-insert-command\=': smartparens watches
+    ;; that hook too, and what it does with a closing delimiter is exactly
+    ;; what the tabout above exists to take over.
+    (when (fboundp 'noteworthy-snippets-maybe-auto-expand)
+      (noteworthy-snippets-maybe-auto-expand))))
 
 (defun noteworthy-typst-close-paren ()
   "Jump past the enclosing `()\=' group, or insert `)\='."
@@ -552,13 +558,16 @@ not the one point is in."
   (insert "}"))
 
 (defun noteworthy-typst-smart-space ()
-  "Insert space. If between $$, expand to $ $."
+  "Insert a space.  Between `$|$\=' expand to `$ | $\='."
   (interactive)
-  (insert " ")
-  (when (and (eq (char-before (1- (point))) ?$)
-             (eq (char-after) ?$))
-    (insert " ")
-    (backward-char 1)))
+  (if (and (eq (char-before) ?$) (eq (char-after) ?$))
+      (progn (insert "  ") (backward-char 1))
+    ;; `self-insert-command\=', not `insert\=': the auto-expansion engine hangs
+    ;; off `post-self-insert-hook\=', which a bare `insert\=' does not run.  A
+    ;; space is the delimiter that finishes `dx \=' -> `dif x \=', so binding SPC
+    ;; to a command that inserted quietly meant the space form never fired
+    ;; while the comma form did.
+    (self-insert-command 1 ?\s)))
 
 (defun noteworthy-typst-smart-pair (char)
   "Smart pairing for CHAR (* and _). Skip or pair based on context."
