@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: In the same way
+# key: Isw
+# group: prose
+# condition: (noteworthy-typst-in 'markup)
+# --
+In the same way
