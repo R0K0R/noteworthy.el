@@ -4,6 +4,6 @@
 # group: blocks
 # condition: (noteworthy-typst-in 'markup)
 # --
-#solution[
+#solution("$1", ${2:auto})[
   $0
 ]
