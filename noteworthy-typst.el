@@ -581,6 +581,26 @@ not the one point is in."
    (t
     (insert char))))
 
+(defun noteworthy-typst--in-open-string-p ()
+  "Non-nil when a string was opened earlier on this line and not yet closed.
+
+Counted here rather than taken from `syntax-ppss\='.  In markup a quote is
+ordinary text -- `The 5\" screen is small.\=' is a perfectly good sentence --
+so a single unpaired quote anywhere earlier in the document leaves ppss
+convinced that every position after it sits inside a string.  Asking it
+meant one stray quote stopped every later quote in the file from pairing.
+
+The line is the right scope: Typst strings do not span lines, and the
+question only ever concerns the string being typed."
+  (let ((end (point))
+        (n 0))
+    (save-excursion
+      (beginning-of-line)
+      (while (search-forward "\"" end t)
+        (unless (eq (char-before (1- (point))) ?\\)
+          (setq n (1+ n)))))
+    (cl-oddp n)))
+
 (defun noteworthy-typst-smart-quote ()
   "Smart `\"' insertion.
 
@@ -600,8 +620,7 @@ In prose markup a quote is just a quote, so it stays a single character."
    ;; the whole construct an ERROR node and the fallback then reads the
    ;; surrounding call as code, where a quote pairs.  So closing
    ;; `#image("images/x.png' by hand produced `#image("images/x.png""'.
-   ;; `syntax-ppss' tracks exactly this and needs no complete parse.
-   ((nth 3 (syntax-ppss))
+   ((noteworthy-typst--in-open-string-p)
     (insert "\""))
    ((noteworthy-typst-markup-context-p)
     (insert "\""))
