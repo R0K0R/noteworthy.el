@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: notation block, numbered and labelled
+# key: notN
+# group: blocks
+# condition: (noteworthy-typst-in 'markup)
+# --
+#notation("${1:Title}", ${2:auto}, label: "${3:label}")[
+  $0
+]

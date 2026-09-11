@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: proof block, labelled
+# key: prF
+# group: blocks
+# condition: (noteworthy-typst-in 'markup)
+# --
+#proof("${1:Title}", label: "${2:label}")[
+  $0
+]

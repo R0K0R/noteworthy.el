@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: analysis block, numbered and labelled
+# key: anA
+# group: blocks
+# condition: (noteworthy-typst-in 'markup)
+# --
+#analysis("${1:Title}", ${2:auto}, label: "${3:label}")[
+  $0
+]

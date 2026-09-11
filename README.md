@@ -153,6 +153,29 @@ incomplete (which, while typing, is most of the time). It returns one of
 `markup`, `math`, `raw`, `string`, `comment` or `code` — the same function
 that gates `*`/`_`/`"` pairing, so snippets and pairing can never disagree.
 
+### Blocks
+
+Every block has two keys. The plain one gives the common case — a title and
+a body, `thm` for `#theorem("Title")[...]`. Capitalising the last letter
+gives the same block with every field: `thM` adds the number and the label,
+so it can be numbered by hand and referenced from anywhere with `@label`.
+
+| plain | full | block |
+|-------|------|-------|
+| `thm`  | `thM`  | theorem |
+| `def`  | `deF`  | definition |
+| `note` | `notE` | note |
+| `exa`  | `exA`  | example |
+| `ana`  | `anA`  | analysis |
+| `notn` | `notN` | notation |
+| `eqn`  | `eqN`  | equation |
+| `sol`  | `soL`  | solution |
+| `prf`  | `prF`  | proof |
+
+The number defaults to `auto`, which means "keep counting" — leave it and
+the block numbers itself. A proof takes no number, since it never prints
+one, so `prF` fills in the title and label only.
+
 ### Writing your own
 
 Drop a file in `snippets/typst-ts-mode/` with a `# condition:` header:

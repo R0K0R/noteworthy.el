@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: definition block, numbered and labelled
+# key: deF
+# group: blocks
+# condition: (noteworthy-typst-in 'markup)
+# --
+#definition("${1:Title}", ${2:auto}, label: "${3:label}")[
+  $0
+]
