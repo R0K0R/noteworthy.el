@@ -595,6 +595,14 @@ In prose markup a quote is just a quote, so it stays a single character."
    ;; type over the closing quote
    ((eq (char-after) ?\")
     (forward-char 1))
+   ;; Already inside a string whose closing quote is missing -- this keypress
+   ;; is that quote.  The parse cannot say so: an unterminated string makes
+   ;; the whole construct an ERROR node and the fallback then reads the
+   ;; surrounding call as code, where a quote pairs.  So closing
+   ;; `#image("images/x.png' by hand produced `#image("images/x.png""'.
+   ;; `syntax-ppss' tracks exactly this and needs no complete parse.
+   ((nth 3 (syntax-ppss))
+    (insert "\""))
    ((noteworthy-typst-markup-context-p)
     (insert "\""))
    (t
