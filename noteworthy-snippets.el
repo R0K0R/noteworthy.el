@@ -178,6 +178,17 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; Postfix styles: bbR -> bb(R).  The captured name is the function.
     (:trigger "\\(bb\\|cal\\|frak\\|bold\\|upright\\|sans\\|mono\\)\\(${LETTER}\\)"
      :expand "\\1(\\2)$0" :in (math))
+    ;; `xsq\=' -> `x sqrt()\='.  The keyed `sq\=' has to start a word, so glued to
+    ;; a variable it never fired at all -- and letting it fire glued without
+    ;; the space would give `xsqrt(2)\=', one identifier Typst does not have
+    ;; rather than x beside a root.  Putting the character back with a space
+    ;; after it is the whole rule.
+    ;;
+    ;; Only a letter or a digit needs it.  After `)\=', `]\=' or an operator the
+    ;; key already starts a word, so the keyed snippet matches first and
+    ;; `(a+b)sqrt(2)\=' is what was wanted anyway.
+    (:trigger "\\(${LETTER}\\|${DIGIT}\\)sq"
+     :expand "\\1 sqrt($1)$0" :in (math))
     ;; Differentials: `dx ' -> `dif x '.  The delimiter is part of the
     ;; trigger, and that is the whole trick.  Firing on the letter instead
     ;; would expand the moment you typed the second character of `det',

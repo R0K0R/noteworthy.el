@@ -248,6 +248,12 @@ The shipped rules give you:
 Typst has no single-quoted string. That is a smartparens rule, disabled for
 `typst-ts-mode`; nothing here binds `'`.
 
+`xsq` → `x sqrt()`. The keyed `sq` has to start a word, so glued to a
+variable it does not fire; this puts the character back with the space Typst
+needs — `xsqrt(2)` would be one identifier, not `x` beside a root. Only a
+letter or digit needs it: after `)` or an operator the keyed snippet matches
+first, and `(a+b)sqrt(2)` is already right.
+
 Plus the keyed ones: `int` → `integral` and `prod` → `product` (the two short
 names Typst does not have), `sr` `cb` `inv` for powers, `sum;` `int;` `prod;`
 `lim;` for big operators with bounds, `mat;` `bmat;` `cases;` `vec;` for
