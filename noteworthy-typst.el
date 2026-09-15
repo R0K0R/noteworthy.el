@@ -165,14 +165,31 @@ This is the single source of truth for the pairing gate and for the
   (noteworthy-typst--let-redisplay-claim-ranges)
   (if (not (treesit-language-available-p 'typst))
       (noteworthy-typst--textual-context)
-    (let ((node (treesit-node-at (point)))
-          (result nil))
+    (let* ((node (treesit-node-at (point)))
+           ;; Nothing around point was parsed as anything: raw characters.
+           ;; True of ordinary prose, and of every region recovery gave up on.
+           (unparsed (equal (treesit-node-type node) "text"))
+           (result nil))
       (while (and node (null result))
         (let ((type (treesit-node-type node)))
           (setq result
-                (if (equal type "ERROR")
-                    (noteworthy-typst--textual-context)
-                  (cdr (assoc type noteworthy-typst--context-by-node-type)))))
+                (cond
+                 ((equal type "ERROR")
+                  (noteworthy-typst--textual-context))
+                 ;; `source_file' and `content' are where error recovery puts
+                 ;; what it could not parse -- as one `text' node, with no
+                 ;; ERROR node in the chain to admit it.  Below an unbalanced
+                 ;; construct the rest of the file then read as markup,
+                 ;; however plainly it was code: the quote stopped pairing and
+                 ;; `*' started, right through the multi-line call being
+                 ;; typed.  A healthy `[...]' block still decides; it is only
+                 ;; unparsed text inside a broken container that does not.
+                 ((and unparsed
+                       (member type '("source_file" "content"))
+                       (treesit-node-check node 'has-error))
+                  (noteworthy-typst--textual-context))
+                 (t
+                  (cdr (assoc type noteworthy-typst--context-by-node-type))))))
         (setq node (treesit-node-parent node)))
       (or result (noteworthy-typst--textual-context)))))
 
