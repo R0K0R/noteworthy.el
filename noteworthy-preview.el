@@ -252,8 +252,35 @@ Safe version that works for both master and included files."
     (unless (eq src (current-buffer)) (set-buffer src)))
   (condition-case err
       (cond
-       ;; Prefer the LSP: no second tinymist, and it works from a buffer whose
-       ;; own server has not started yet.
+       ;; typst-preview.el's session, first.  It runs its own `tinymist
+       ;; preview' process and is reached over its own websocket; the LSP
+       ;; knows nothing about it.  Asking the LSP first sent
+       ;; `tinymist.scrollPreview' for a task named `default_preview' that
+       ;; only `noteworthy-preview-start' ever creates, the LSP refused, the
+       ;; error handler said so only in *Messages*, and the socket that would
+       ;; have worked was never reached.  A live tinymist workspace is not
+       ;; evidence tinymist is hosting the preview: lsp-mode starts one for
+       ;; every Typst buffer regardless.
+       ((and (boundp 'typst-preview--local-master)
+             typst-preview--local-master
+             (fboundp 'typst-preview--master-socket)
+             (typst-preview--master-socket typst-preview--local-master))
+        (typst-preview-send-position)
+        (message "Sent position to local master."))
+       ((and (boundp 'typst-preview--active-masters)
+             typst-preview--active-masters
+             (fboundp 'typst-preview--master-socket)
+             (typst-preview--master-socket (car typst-preview--active-masters)))
+        (let ((socket (typst-preview--master-socket (car typst-preview--active-masters)))
+              (msg (json-encode `(("event" . "panelScrollTo")
+                                  ("filepath" . ,(file-truename buffer-file-name))
+                                  ("line" . ,(1- (line-number-at-pos)))
+                                  ("character" . ,(max 1 (current-column)))))))
+          (websocket-send-text socket msg)
+          (message "Sent position to global typst session")))
+       ;; The LSP-hosted preview, which `noteworthy-preview-start' makes:
+       ;; no second tinymist, and it works from a buffer whose own server
+       ;; has not started yet.
        ((noteworthy-preview--tinymist-workspace)
         (let ((lsp--cur-workspace (noteworthy-preview--tinymist-workspace)))
           (lsp-request-async
@@ -268,24 +295,6 @@ Safe version that works for both master and included files."
            :error-handler (lambda (e) (message "Preview scroll refused: %s" e))))
         (message "Preview -> %s:%d" (file-name-nondirectory buffer-file-name)
                  (line-number-at-pos)))
-       ((and (boundp 'typst-preview--local-master)
-             typst-preview--local-master
-             (fboundp 'typst-preview--master-socket)
-             (typst-preview--master-socket typst-preview--local-master))
-        (typst-preview-send-position)
-        (message "Sent position to local master."))
-       ((and (boundp 'typst-preview--active-masters)
-             typst-preview--active-masters)
-        (let* ((master (car typst-preview--active-masters))
-               (socket (typst-preview--master-socket master)))
-          (if socket
-              (let ((msg (json-encode `(("event" . "panelScrollTo")
-                                        ("filepath" . ,(file-truename buffer-file-name))
-                                        ("line" . ,(1- (line-number-at-pos)))
-                                        ("character" . ,(max 1 (current-column)))))))
-                (websocket-send-text socket msg)
-                (message "Sent position to global typst session"))
-            (message "Found active master but no socket connected"))))
        (t (message "No active typst-preview session to send position to")))
     (error (message "typst-preview error: %s" (error-message-string err)))))
 
