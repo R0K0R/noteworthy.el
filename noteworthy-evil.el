@@ -176,20 +176,37 @@
       ;; Toggle Log (Alt+t l)
       (kbd "M-t l") #'noteworthy-toggle-log)))
 
+(defvar noteworthy-pdf-buffer nil
+  "The textbook PDF buffer the Noteworthy layout opened, or nil.
+Set by the layouts when they open their PDF, and what
+`noteworthy-pdf-scroll' scrolls.  Recorded rather than looked for:
+the PDF is in `pdf-view-mode' in a graphical frame but `doc-view-mode'
+in a terminal, and a search for one mode missed the other.")
+
 (defun noteworthy-pdf-scroll (direction)
-  "Scroll the visible PDF window in DIRECTION."
-  (let ((pdf-window (cl-find-if (lambda (w)
-                                  (with-selected-window w
-                                    (eq major-mode 'pdf-view-mode)))
-                                (window-list))))
-    (if pdf-window
-        (with-selected-window pdf-window
-          (cond
-           ((eq direction 'up) (pdf-view-previous-line-or-previous-page 5))
-           ((eq direction 'down) (pdf-view-next-line-or-next-page 5))
-           ((eq direction 'left) (image-backward-hscroll 20))
-           ((eq direction 'right) (image-forward-hscroll 20))))
-      (message "No PDF window found to scroll"))))
+  "Turn or pan the layout's PDF, `noteworthy-pdf-buffer', in DIRECTION.
+`up' and `down' turn the page; `left' and `right' pan it."
+  (let* ((buf noteworthy-pdf-buffer)
+         (win (and (buffer-live-p buf) (get-buffer-window buf t))))
+    (cond
+     ((not (buffer-live-p buf))
+      (message "No PDF opened by the Noteworthy layout"))
+     ((not win)
+      (message "%s is not shown in any window" (buffer-name buf)))
+     (t
+      (with-selected-window win
+        (if (derived-mode-p 'pdf-view-mode)
+            (pcase direction
+              ('up    (pdf-view-previous-page-command 1))
+              ('down  (pdf-view-next-page-command 1))
+              ('left  (image-backward-hscroll 20))
+              ('right (image-forward-hscroll 20)))
+          ;; doc-view, which is what a terminal frame shows a PDF in.
+          (pcase direction
+            ('up    (doc-view-previous-page 1))
+            ('down  (doc-view-next-page 1))
+            ('left  (image-backward-hscroll 20))
+            ('right (image-forward-hscroll 20)))))))))
 
 (noteworthy-evil-setup)
 

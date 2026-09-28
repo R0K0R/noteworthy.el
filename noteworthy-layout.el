@@ -20,6 +20,8 @@ Includes safety guards to prevent errors if Treemacs isn't ready."
               (error (message "Noteworthy: Could not re-enforce Treemacs root: %s" err)))))))))
 
 ;; Helper to setup PDF window
+(defvar noteworthy-pdf-buffer)
+
 (defun noteworthy--setup-pdf-window (editor-window pdf-file)
   "Setup the PDF window next to EDITOR-WINDOW displaying PDF-FILE."
   (when (and pdf-file
@@ -43,6 +45,8 @@ Includes safety guards to prevent errors if Treemacs isn't ready."
           (ignore-errors (window-resize pdf-window delta t)))
         (select-window pdf-window)
         (find-file pdf-file)
+        ;; What `noteworthy-pdf-scroll' scrolls.
+        (setq noteworthy-pdf-buffer (current-buffer))
         ;; Only fit zoom to width, do not resize window
         (when (bound-and-true-p pdf-view-mode)
           (run-with-timer 0.1 nil
