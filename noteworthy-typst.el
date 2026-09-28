@@ -106,9 +106,28 @@ Returns `math\=', `raw\=', `code\=' or `markup\='."
        ;; markup) or a call that has already closed.
        ((let ((hash (cl-position ?# before :from-end t)))
           (and hash
-               (not (string-match-p "[][]" (substring before (1+ hash))))))
+               (let ((rest (substring before (1+ hash))))
+                 (and (not (string-match-p "[][]" rest))
+                      (noteworthy-typst--hash-expression-open-p rest)))))
         'code)
        (t 'markup)))))
+
+(defun noteworthy-typst--hash-expression-open-p (rest)
+  "Non-nil when REST, the text after a `#\=' on this line, is still code.
+
+A statement -- `let\=', `set\=', `show\=', `import\=', `include\=', `return\='
+-- runs to the end of the line.  Any other embedded expression ends at the
+first space outside its brackets: `#f(a) *\=' is markup again by the `*\='.
+Treating the whole rest of the line as code stopped `*\=' pairing after
+every call that had already closed."
+  (or (string-match-p "\\`\\(?:let\\|set\\|show\\|import\\|include\\|return\\)\\_>" rest)
+      (let ((depth 0) (open t))
+        (dotimes (i (length rest))
+          (let ((ch (aref rest i)))
+            (cond ((memq ch '(?\( ?\{)) (setq depth (1+ depth)))
+                  ((memq ch '(?\) ?\})) (setq depth (max 0 (1- depth))))
+                  ((and (zerop depth) (memq ch '(?\s ?\t))) (setq open nil)))))
+        open)))
 
 (defun noteworthy-typst--incomplete-context-p ()
   "Return non-nil when the text before point does not read as markup."
@@ -123,6 +142,9 @@ Returns `math\=', `raw\=', `code\=' or `markup\='."
     ("code" . code))
   "Which context each decisive tree-sitter node type puts point in.
 
+See also `noteworthy-typst--code-node-types\=', which covers the
+constructs that are code only when no formula encloses them.
+
 Only wrappers that settle the question belong here.  `call\=', `ident\=',
 `group\=', `attach\=', `number\=' and the statement forms (`let\=', `import\=',
 ...) are deliberately absent: they occur under `formula\=' and under
@@ -131,6 +153,22 @@ nested in.  `$ sqrt(x) $\=' parses as call > formula > math, and treating
 `call\=' as decisive called that code.  Walking past them reaches the real
 wrapper -- `code\=' encloses every statement form anyway, and a `content\='
 block inside a call correctly lands back in markup.")
+
+(defconst noteworthy-typst--code-node-types
+  '("call" "group" "block" "let" "set" "show" "import" "include" "lambda"
+    "field" "return" "for" "while" "if" "context" "array" "dict" "tagged"
+    "assign" "binary" "unary" "branch")
+  "Node types that make point code when markup, not a formula, encloses them.
+
+The grammar puts `#f(...)\=' straight under `content\=', with no `code\='
+node between -- so walking past `call\=' (as the table above must, for the
+sake of `$ sqrt(x) $\=') ran into `content\=' and called every argument list
+markup.  `*\=' then paired inside `#f(|)\=' and inside every cetz call.
+
+So the walk remembers passing one of these with point strictly inside it,
+and a `content\=' or `source_file\=' above that answers code instead.  A
+formula still decides first on the way up, and so does a content block
+`[...]\=' nested in the call, which is markup again.")
 
 (defun noteworthy-typst--let-redisplay-claim-ranges ()
   "Let redisplay learn what a pending edit reparented, before we reparse.
@@ -165,16 +203,31 @@ This is the single source of truth for the pairing gate and for the
   (noteworthy-typst--let-redisplay-claim-ranges)
   (if (not (treesit-language-available-p 'typst))
       (noteworthy-typst--textual-context)
-    (let* ((node (treesit-node-at (point)))
+    (let* ((pt (point))
+           (node (treesit-node-at pt))
            ;; Nothing around point was parsed as anything: raw characters.
            ;; True of ordinary prose, and of every region recovery gave up on.
            (unparsed (equal (treesit-node-type node) "text"))
+           ;; A zero-width token (`end\=', `sep\=') or a paragraph break says
+           ;; nothing about what point is in: at the end of `#let f(x) = x |\='
+           ;; the tree has already closed the statement.
+           (vague (or (= (treesit-node-start node) (treesit-node-end node))
+                      (equal (treesit-node-type node) "parbreak")))
+           (in-code nil)
            (result nil))
       (while (and node (null result))
         (let ((type (treesit-node-type node)))
+          (when (and (member type noteworthy-typst--code-node-types)
+                     (< (treesit-node-start node) pt (treesit-node-end node)))
+            (setq in-code t))
           (setq result
                 (cond
                  ((equal type "ERROR")
+                  (noteworthy-typst--textual-context))
+                 ;; Inside a call, block or statement sitting in markup.
+                 ((and in-code (member type '("content" "source_file")))
+                  'code)
+                 ((and vague (member type '("content" "source_file")))
                   (noteworthy-typst--textual-context))
                  ;; `source_file' and `content' are where error recovery puts
                  ;; what it could not parse -- as one `text' node, with no
