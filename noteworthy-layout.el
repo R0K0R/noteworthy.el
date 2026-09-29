@@ -138,6 +138,17 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
                                 (with-current-buffer buf
                                   (setq-local noteworthy-project-root dir)
                                   (setq-local noteworthy-master-file noteworthy-master-file)
+                                  ;; Normally set by the mode hook in
+                                  ;; noteworthy.el, but only when the buffer
+                                  ;; is created: a master buffer left open by
+                                  ;; an earlier init interrupted during its
+                                  ;; hooks (C-g through a slow direnv) never
+                                  ;; gets them, and typst-preview then roots
+                                  ;; at the file's own directory -- where
+                                  ;; parser.typ's `../templater.typ' import
+                                  ;; escapes the root -- and asks for a master.
+                                  (setq-local typst-preview-default-dir dir)
+                                  (setq-local typst-preview--master-file noteworthy-master-file)
                                   (typst-preview-start t)
                                   ;; CHAIN: Setup PDF after preview starts
                                   (noteworthy--setup-pdf-window editor-window pdf-file)
