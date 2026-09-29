@@ -224,7 +224,14 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; the whole derivative, and being keyed they are tried first, so `dv;'
     ;; stays the fraction and only the other letters reach this rule.
     (:trigger "\\(^\\|[^[:alnum:]_-]\\)d\\(${LETTER}\\);"
-     :expand "\\1(dif \\2)" :in (math)))
+     :expand "\\1(dif \\2)" :in (math))
+    ;; `dx/' -> `(dif x)/', and `pdx/' -> `(partial x)/'.  A slash makes a
+    ;; fraction of the operand in front of it, and `dif x/' would put only
+    ;; the x on top.  The slash is kept.
+    (:trigger "\\(^\\|[^[:alnum:]_-]\\)pd\\(${LETTER}\\)/"
+     :expand "\\1(partial \\2)/" :in (math))
+    (:trigger "\\(^\\|[^[:alnum:]_-]\\)d\\(${LETTER}\\)/"
+     :expand "\\1(dif \\2)/" :in (math)))
   "Regex auto-expansions, tried in order after the keyed snippets.
 
 Each rule is a plist:
