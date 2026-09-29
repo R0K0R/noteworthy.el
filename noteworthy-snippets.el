@@ -168,6 +168,14 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; without a trailing space.  Now that it ends with one, subscripting a
     ;; spelled-out greek letter has to step over that space.
     (:trigger "\\(${GREEK}\\) \\(${DIGIT}\\)" :expand "\\1_\\2" :in (math))
+    ;; `@qarr' -> `arrow(theta)'.  The postfix accents below need a letter
+    ;; glued to the accent, and `@q' leaves `theta ' with its space, so a
+    ;; greek letter gets a rule of its own.  Only straight after the `@'
+    ;; expansion, so a `theta' typed out and followed by `hat' later is left
+    ;; alone.  `dot' is left out: `alpha dot beta' is the multiplication dot,
+    ;; the far likelier thing to type there.
+    (:trigger "\\(^\\|[^[:alpha:]]\\)\\([[:alpha:]]+\\) \\(ddot\\|hat\\|bar\\|til\\|vec\\|arr\\|und\\|ovl\\)"
+     :expand noteworthy-snippets-greek-accent :in (math))
     ;; A digit or letter run raised or lowered as a group: x_12 -> x_(12)
     (:trigger "\\(${LETTER}\\)_\\(${DIGIT}${DIGIT}+\\)" :expand "\\1_(\\2)" :in (math))
     ;; Postfix accents: xhat -> hat(x).  Typst has no postfix form, so the
@@ -267,6 +275,27 @@ the arrow accent -- what LaTeX Suite spells `\\vec\\=' -- is `arrow()\\='.")
   (let ((fn (cdr (assoc (nth 1 groups) noteworthy-snippets--accents))))
     (and fn (format "%s(%s)$0" fn (nth 0 groups)))))
 
+(defvar-local noteworthy-snippets--last-end nil
+  "Where the last auto-expansion left point, as a marker.")
+
+(defun noteworthy-snippets-greek-accent (groups)
+  "Wrap the greek letter in GROUPS with its accent, right after `@'.
+GROUPS is the character before the name, put back as it was, the name and
+the accent.  Declines unless the name is one `@' gives and it and its
+space are what the last expansion inserted, with nothing typed since but
+the accent itself.
+
+The name is matched as a whole word and looked up, not matched against
+${GREEK}: that lists `eta' before `theta', so `theta arr' would wrap only
+the `eta', and it has no capitals."
+  (let ((accent (nth 2 groups)))
+    (and (rassoc (nth 1 groups) noteworthy-snippets--greek)
+         (markerp noteworthy-snippets--last-end)
+         (eq (marker-buffer noteworthy-snippets--last-end) (current-buffer))
+         (= (marker-position noteworthy-snippets--last-end)
+            (- (point) (length accent)))
+         (concat (nth 0 groups) (noteworthy-snippets-accent (cdr groups))))))
+
 (defun noteworthy-snippets--expand-variables (trigger)
   "Substitute ${NAME} fragments into TRIGGER."
   (replace-regexp-in-string
@@ -359,7 +388,10 @@ Runs from `post-self-insert-hook\='."
                               template)))
               (if (noteworthy-snippets--fieldless-p content)
                   (noteworthy-snippets--expand-plain content (nth 1 hit) (nth 2 hit))
-                (yas-expand-snippet template (nth 1 hit) (nth 2 hit))))))
+                (yas-expand-snippet template (nth 1 hit) (nth 2 hit)))
+              (if (markerp noteworthy-snippets--last-end)
+                  (set-marker noteworthy-snippets--last-end (point))
+                (setq noteworthy-snippets--last-end (point-marker))))))
       (error
        (message "Noteworthy: auto-expansion failed: %s"
                 (error-message-string err))))))
