@@ -162,6 +162,12 @@ The LaTeX Suite equivalent of its snippet variables."
     (:trigger "\\(${LETTER}\\)\\(${DIGIT}\\)" :expand "\\1_\\2" :in (math))
     ;; @a -> alpha.  Typst spells the greek letters out, so this is purely
     ;; keystrokes; the table is the rule's own business.
+    ;; `d@q' -> `dif theta', `pd@q' -> `partial theta': the differentials
+    ;; below want a single letter after the d, and a greek one arrives as
+    ;; `@q'.  Before the `@' rule, which would otherwise take the `@q' and
+    ;; leave `dtheta'.  Same boundary as those rules, put back by \\1.
+    (:trigger "\\(^\\|[^[:alnum:]_-]\\)\\(p?d\\)@\\([A-Za-z]\\)"
+     :expand noteworthy-snippets-greek-differential :in (math))
     (:trigger "@\\([A-Za-z]\\)" :expand noteworthy-snippets-greek :in (math))
     ;; `alpha 1\=' -> `alpha_1\='.  The rule above only sees a single letter
     ;; against the digit, which caught `alpha1\=' back when `@a\=' expanded
@@ -266,6 +272,13 @@ whatever you type next is a different identifier -- `@ab\=' would have to
 become `alphab\='.  The space is the separator you would type anyway."
   (when-let* ((name (cdr (assoc (car groups) noteworthy-snippets--greek))))
     (concat name " ")))
+
+(defun noteworthy-snippets-greek-differential (groups)
+  "Expand GROUPS -- boundary, `d' or `pd', letter -- to a greek differential."
+  (when-let* ((greek (noteworthy-snippets-greek (list (nth 2 groups)))))
+    (concat (nth 0 groups)
+            (if (equal (nth 1 groups) "pd") "partial " "dif ")
+            greek)))
 
 (defconst noteworthy-snippets--accents
   '(("ddot" . "dot.double") ("dot" . "dot") ("hat" . "hat") ("bar" . "bar")
