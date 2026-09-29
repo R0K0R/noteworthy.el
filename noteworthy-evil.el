@@ -195,18 +195,29 @@ in a terminal, and a search for one mode missed the other.")
       (message "%s is not shown in any window" (buffer-name buf)))
      (t
       (with-selected-window win
-        (if (derived-mode-p 'pdf-view-mode)
-            (pcase direction
-              ('up    (pdf-view-previous-page-command 1))
-              ('down  (pdf-view-next-page-command 1))
-              ('left  (image-backward-hscroll 20))
-              ('right (image-forward-hscroll 20)))
-          ;; doc-view, which is what a terminal frame shows a PDF in.
+        (cond
+         ((derived-mode-p 'pdf-view-mode)
+          (pcase direction
+            ('up    (pdf-view-previous-page-command 1))
+            ('down  (pdf-view-next-page-command 1))
+            ('left  (image-backward-hscroll 20))
+            ('right (image-forward-hscroll 20))))
+         ;; An EPUB in nov.el.  It has no pages, so up and down scroll a
+         ;; screen -- running on into the next chapter at the end of one --
+         ;; and, with nothing to pan, left and right change chapter.
+         ((derived-mode-p 'nov-mode)
+          (pcase direction
+            ('up    (nov-scroll-down nil))
+            ('down  (nov-scroll-up nil))
+            ('left  (nov-previous-document))
+            ('right (nov-next-document))))
+         ;; doc-view, which is what a terminal frame shows a PDF in.
+         (t
           (pcase direction
             ('up    (doc-view-previous-page 1))
             ('down  (doc-view-next-page 1))
             ('left  (image-backward-hscroll 20))
-            ('right (image-forward-hscroll 20)))))))))
+            ('right (image-forward-hscroll 20))))))))))
 
 (noteworthy-evil-setup)
 
