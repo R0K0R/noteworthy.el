@@ -138,6 +138,42 @@ Without this the preview only updates when the mouse happens to cross it."
 
 (advice-add 'find-file :around #'noteworthy-find-file-in-editor)
 
+;; The layout marks its windows with parameters, and they must survive a
+;; workspace switch: Doom's workspaces save and restore window layouts
+;; with `window-state-get'/`window-state-put', which keep a parameter only
+;; if it is listed here.  Without that, coming back to the workspace left
+;; no window marked as the editor, and a preview click opened the source
+;; in whatever window was largest -- often the terminal.
+(dolist (param '(noteworthy-editor noteworthy-preview noteworthy-bottom))
+  (setf (alist-get param window-persistent-parameters) 'writable))
+
+(defun noteworthy--editor-window ()
+  "The window a preview click should open source in.
+The one marked `noteworthy-editor'; failing that, one already showing a
+Typst buffer, else the largest ordinary window -- never a terminal,
+treemacs, the PDF or the preview -- which is then marked as the editor."
+  (let ((windows (window-list)))
+    (or (cl-find-if (lambda (w) (window-parameter w 'noteworthy-editor)) windows)
+        (let ((w (or (cl-find-if (lambda (w)
+                                   (with-current-buffer (window-buffer w)
+                                     (derived-mode-p 'typst-ts-mode)))
+                                 windows)
+                     (car (sort (cl-remove-if
+                                 (lambda (w)
+                                   (or (window-dedicated-p w)
+                                       (window-parameter w 'window-side)
+                                       (window-parameter w 'noteworthy-preview)
+                                       (with-current-buffer (window-buffer w)
+                                         (or (derived-mode-p 'vterm-mode 'term-mode 'eshell-mode
+                                                             'treemacs-mode 'doc-view-mode 'pdf-view-mode
+                                                             'xwidget-webkit-mode)
+                                             (equal (buffer-name) "*kitty-browser*")))))
+                                 windows)
+                                (lambda (a b) (> (* (window-total-width a) (window-total-height a))
+                                                 (* (window-total-width b) (window-total-height b)))))))))
+          (when w (set-window-parameter w 'noteworthy-editor t))
+          w))))
+
 (advice-add 'typst-preview--goto-file-position :override
             (lambda (file-name position)
               "Jump to position in FILE-NAME, reusing existing buffers/windows."
@@ -148,12 +184,9 @@ Without this the preview only updates when the mouse happens to cross it."
                                          (buffer-list))))
                 (unless buffer
                   (setq buffer (find-file-noselect true-path)))
-                (let ((editor-win (or (cl-find-if (lambda (w) (window-parameter w 'noteworthy-editor))
-                                                  (window-list))
-                                      (get-largest-window))))
-                  (if (and editor-win (window-live-p editor-win))
-                      (select-window editor-win)
-                    nil))
+                (let ((editor-win (noteworthy--editor-window)))
+                  (when (and editor-win (window-live-p editor-win))
+                    (select-window editor-win)))
                 (switch-to-buffer buffer)
                 (goto-char (point-min))
                 (let ((line (if (vectorp position) (aref position 0) (car position)))
