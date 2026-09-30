@@ -39,7 +39,34 @@ If nil, defaults to 35% of the frame width."
 (with-eval-after-load 'evil
   (require 'noteworthy-evil))
 
+(defvar noteworthy--dynamic-inputs-cache (make-hash-table :test #'equal)
+  "ROOT -> (STAMP . INPUTS) for `noteworthy-typst-get-dynamic-inputs'.")
+
+(defun noteworthy--dynamic-inputs-stamp (root)
+  "Modification times the inputs of ROOT depend on.
+noteworthy.py, the files in config/, and content/ and its chapter
+directories, whose times change as pages come and go."
+  (let ((content (expand-file-name "content" root))
+        (config (expand-file-name "config" root)))
+    (mapcar (lambda (f) (file-attribute-modification-time (file-attributes f)))
+            (append (list (expand-file-name "noteworthy.py" root) content)
+                    (and (file-directory-p config) (directory-files config t "\\`[^.]"))
+                    (and (file-directory-p content) (directory-files content t "\\`[0-9]"))))))
+
 (defun noteworthy-typst-get-dynamic-inputs (root)
+  "The typst inputs noteworthy.py --print-inputs gives for ROOT, cached.
+Running it takes two Python start-ups, ~0.4 s, and it ran for every Typst
+buffer opened -- twice in a launch.  The result is kept until one of the
+files it depends on changes (`noteworthy--dynamic-inputs-stamp')."
+  (let ((stamp (noteworthy--dynamic-inputs-stamp root))
+        (hit (gethash root noteworthy--dynamic-inputs-cache)))
+    (if (and hit (equal (car hit) stamp))
+        (cdr hit)
+      (let ((inputs (noteworthy--run-dynamic-inputs root)))
+        (puthash root (cons stamp inputs) noteworthy--dynamic-inputs-cache)
+        inputs))))
+
+(defun noteworthy--run-dynamic-inputs (root)
   "Run noteworthy.py --print-inputs in ROOT using a temp wrapper script."
   (let ((script (expand-file-name "noteworthy.py" root)))
     (if (file-exists-p script)

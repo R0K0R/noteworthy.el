@@ -17,6 +17,21 @@
 (defvar noteworthy-typst-mode-map (make-sparse-keymap)
   "Keymap for noteworthy-typst-mode.")
 
+(defun noteworthy-typst-first-page (dir)
+  "The first page of project DIR's first chapter, or nil if it has none.
+Chapters are content/<chapter>/<page>.typ, both numbered; the lowest of
+each is first.  Works on a remote DIR too."
+  (let* ((content (expand-file-name "content" dir))
+         (num (lambda (f) (string-to-number (file-name-base f))))
+         (by-num (lambda (files) (sort files (lambda (a b) (< (funcall num a) (funcall num b))))))
+         (chapters (and (file-directory-p content)
+                        (funcall by-num
+                                 (seq-filter #'file-directory-p
+                                             (directory-files content t "\\`[0-9]+\\'"))))))
+    (seq-some (lambda (chapter)
+                (car (funcall by-num (directory-files chapter t "\\`[0-9]+\\.typ\\'"))))
+              chapters)))
+
 (define-minor-mode noteworthy-typst-mode
   "Minor mode for Noteworthy Typst bindings."
   :init-value nil

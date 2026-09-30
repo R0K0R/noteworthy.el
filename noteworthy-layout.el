@@ -22,6 +22,8 @@ Includes safety guards to prevent errors if Treemacs isn't ready."
 ;; Helper to setup PDF window
 (defvar noteworthy-pdf-buffer)
 
+(declare-function noteworthy-typst-first-page "noteworthy-typst" (dir))
+
 (defun noteworthy--setup-pdf-window (editor-window pdf-file)
   "Setup the PDF window next to EDITOR-WINDOW displaying PDF-FILE."
   (when (and pdf-file
@@ -95,7 +97,9 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
       
       (setq-default noteworthy-master-file master-path)
       (setq noteworthy-master-file master-path)
-      (find-file master-path))
+      ;; The editor opens the first chapter page, which is what gets
+      ;; written; the master stays the preview's document regardless.
+      (find-file (or (noteworthy-typst-first-page dir) master-path)))
 
     (let ((editor-window (selected-window)))
       (set-window-parameter editor-window 'noteworthy-editor t)
@@ -131,8 +135,11 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
       (if (and (noteworthy-xwidget-available-p)
                (fboundp 'typst-preview-start))
           (let ((buf (current-buffer)))
-            ;; Start preview, then chain PDF setup
-            (run-with-timer 0.1 nil
+            ;; Start preview, then chain PDF setup.  At once, not from a
+            ;; timer: a timer fired only after `lsp-deferred' had started the
+            ;; language server, which blocks for seconds, so the preview and
+            ;; the PDF came up that much later.
+            (funcall
                             (lambda ()
                               (when (buffer-live-p buf)
                                 (with-current-buffer buf
