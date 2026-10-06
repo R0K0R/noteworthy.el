@@ -184,6 +184,13 @@ The LaTeX Suite equivalent of its snippet variables."
      :expand noteworthy-snippets-greek-accent :in (math))
     ;; A digit or letter run raised or lowered as a group: x_12 -> x_(12)
     (:trigger "\\(${LETTER}\\)_\\(${DIGIT}${DIGIT}+\\)" :expand "\\1_(\\2)" :in (math))
+    ;; `arrow(r) dot;' -> `dot(arrow(r))': the time derivative of a vector,
+    ;; which the postfix accents below cannot reach -- they take a single
+    ;; letter, and a vector ends in `)'.  The `;' says so; without it, `dot'
+    ;; after a vector is the product, as in `arrow(a) dot arrow(b)'.  The
+    ;; vector may hold one level of parentheses, `arrow(r_(i))'.
+    (:trigger "\\(arrow(\\(?:[^()]\\|([^()]*)\\)*)\\) ?\\(ddot\\|dot\\);"
+     :expand noteworthy-snippets-vector-dot :in (math) :max-length 40)
     ;; Postfix accents: xhat -> hat(x).  Typst has no postfix form, so the
     ;; accent has to be typed before its argument -- this puts it back the
     ;; way you think of it.  Longest alternative first, so ddot beats dot.
@@ -247,6 +254,8 @@ Each rule is a plist:
   :expand   a yasnippet template, where \\1..\\9 are the trigger's capture
             groups; or a function of the capture list returning one, or nil
             to decline the match.
+  :max-length  how far back the trigger may reach, if further than
+            `noteworthy-snippets-auto-key-max-length'.
   :in       the contexts it applies to, as `noteworthy-typst-context'
             reports them."
   :type '(repeat plist)
@@ -290,10 +299,24 @@ become `alphab\='.  The space is the separator you would type anyway."
 `vec\\=' gives `arrow\\=' on purpose: in Typst `vec()\\=' is a column vector, and
 the arrow accent -- what LaTeX Suite spells `\\vec\\=' -- is `arrow()\\='.")
 
+(defun noteworthy-snippets-vector-dot (groups)
+  "Put the dot accent named in GROUPS over the vector in GROUPS."
+  (format "%s(%s)$0"
+          (if (equal (nth 1 groups) "ddot") "dot.double" "dot")
+          (nth 0 groups)))
+
 (defun noteworthy-snippets-accent (groups)
-  "Wrap the letter in GROUPS with the accent function it was suffixed with."
+  "Wrap the letter in GROUPS with the accent function it was suffixed with.
+Declines `ddot' right after a closing parenthesis: that is a vector's
+`ddot;' (`noteworthy-snippets-vector-dot') being typed, not a variable d
+with a dot."
   (let ((fn (cdr (assoc (nth 1 groups) noteworthy-snippets--accents))))
-    (and fn (format "%s(%s)$0" fn (nth 0 groups)))))
+    (and fn
+         (not (and (equal (nth 0 groups) "d") (equal (nth 1 groups) "dot")
+                   (save-excursion
+                     (goto-char (- (point) 4))
+                     (looking-back ") ?" (max (point-min) (- (point) 2))))))
+         (format "%s(%s)$0" fn (nth 0 groups)))))
 
 (defvar-local noteworthy-snippets--last-end nil
   "Where the last auto-expansion left point, as a marker.")
@@ -335,16 +358,18 @@ the `eta', and it has no capitals."
 
 (defun noteworthy-snippets--regex-hit ()
   "Return (TEMPLATE START END) for the first regex rule matching at point."
-  (let ((context (noteworthy-typst-context))
-        (limit (max (point-min)
-                    (- (point) noteworthy-snippets-auto-key-max-length))))
+  (let ((context (noteworthy-typst-context)))
     (cl-loop for rule in noteworthy-snippets-regex-rules
              when (memq context (plist-get rule :in))
              thereis
              (save-excursion
                (when (looking-back (noteworthy-snippets--expand-variables
                                     (plist-get rule :trigger))
-                                   limit t)
+                                   (max (point-min)
+                                        (- (point)
+                                           (or (plist-get rule :max-length)
+                                               noteworthy-snippets-auto-key-max-length)))
+                                   t)
                  ;; Capture the groups now: building the template runs more
                  ;; regexp machinery, which would clobber the match data.
                  (let* ((start (match-beginning 0))
