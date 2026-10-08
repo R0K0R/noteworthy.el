@@ -441,6 +441,101 @@ Runs from `post-self-insert-hook\='."
        (message "Noteworthy: auto-expansion failed: %s"
                 (error-message-string err))))))
 
+;;; Auto-spacing run-together names (`costheta' -> `cos theta')
+
+;; In Typst math a run of letters is one name: `costheta' is not cos of
+;; theta but an unknown variable, a compile error, and the LaTeX habit of
+;; writing names together makes it easy to type.  When a word is finished
+;; with a space or a newline, a word that is no name Typst knows but
+;; splits wholly into names it does know gets the spaces put in.
+
+(defcustom noteworthy-snippets-auto-space t
+  "Whether math words like `costheta' are split into `cos theta' as you type.
+See `noteworthy-snippets-maybe-space-word'."
+  :type 'boolean
+  :group 'noteworthy)
+
+(defconst noteworthy-snippets--math-names
+  (append
+   ;; Typst's math operators
+   '("arccos" "arcsin" "arctan" "arg" "cos" "cosh" "cot" "coth" "csc" "csch"
+     "ctg" "deg" "det" "dim" "exp" "gcd" "lcm" "hom" "id" "im" "inf" "ker"
+     "lg" "lim" "liminf" "limsup" "ln" "log" "max" "min" "mod" "Pr" "sec"
+     "sech" "sin" "sinc" "sinh" "sup" "tan" "tanh" "tg" "tr")
+   ;; Greek letters, both cases where Typst has them
+   '("alpha" "beta" "gamma" "delta" "epsilon" "zeta" "eta" "theta" "iota"
+     "kappa" "lambda" "mu" "nu" "xi" "omicron" "pi" "rho" "sigma" "tau"
+     "upsilon" "phi" "chi" "psi" "omega"
+     "Gamma" "Delta" "Theta" "Lambda" "Xi" "Pi" "Sigma" "Upsilon" "Phi"
+     "Psi" "Omega")
+   ;; Symbols and functions commonly written next to a name
+   '("dif" "partial" "nabla" "infinity" "oo" "sum" "product" "integral"
+     "dot" "times" "plus" "minus" "arrow" "hat" "bar" "tilde" "sqrt" "abs"
+     "norm" "vec" "mat" "cases" "frac" "binom" "eq" "approx" "dots" "cdots"
+     "ell" "hbar" "planck"))
+  "Names `noteworthy-snippets-maybe-space-word' splits a word into.")
+
+(defun noteworthy-snippets--split-word (word)
+  "WORD split into known names and single letters, or nil.
+Splits only a word that is not itself a known name, into the fewest
+pieces, of which at least one is a known name of two or more letters --
+so `abc' is left as typed.  Never splits off a lone leading `d', which
+is the differential: `dtheta' is for `d@q'."
+  (let* ((n (length word))
+         (names noteworthy-snippets--math-names)
+         ;; best[i] = fewest-piece split of word[0,i), as a list of pieces
+         (best (make-vector (1+ n) nil)))
+    (unless (member word names)
+      (aset best 0 '())
+      (dotimes (i n)
+        (let ((prefix (aref best i)))
+          (when (or (= i 0) prefix)
+            (dolist (len (number-sequence 1 (- n i)))
+              (let ((piece (substring word i (+ i len)))
+                    (end (+ i len)))
+                (when (or (member piece names) (= len 1))
+                  (let ((cand (append prefix (list piece)))
+                        (have (aref best end)))
+                    (when (or (null have) (< (length cand) (length have)))
+                      (aset best end cand)))))))))
+      (let ((pieces (aref best n)))
+        (and (> (length pieces) 1)
+             (seq-some (lambda (p) (and (> (length p) 1) (member p names))) pieces)
+             (not (equal (car pieces) "d"))
+             pieces)))))
+
+(defun noteworthy-snippets--defined-name-p (word)
+  "Non-nil when WORD is bound with `let' somewhere in this buffer."
+  (save-excursion
+    (goto-char (point-min))
+    (re-search-forward (concat "\\_<let[ \t]+" (regexp-quote word) "\\_>") nil t)))
+
+(defun noteworthy-snippets-maybe-space-word ()
+  "Split the math word just finished, if it runs names together.
+The word is finished by a space or a newline.
+Runs from `post-self-insert-hook'.  It is the run of letters
+before the inserted character, not after `.' (a field, as in `arrow.r'),
+`#' or `_' and not a name defined with `let' in this buffer."
+  (when (and noteworthy-snippets-auto-space
+             (bound-and-true-p noteworthy-typst-mode)
+             (memq last-command-event '(?\s ?\n ?\r)))
+    (save-excursion
+      (backward-char)
+      (let ((end (point)))
+        (skip-chars-backward "[:alpha:]")
+        (let ((start (point)))
+          (when (and (> (- end start) 2)
+                     (not (memq (char-before start) '(?. ?# ?_ ?\\ ?@)))
+                     (not (and (char-before start)
+                               (string-match-p "[[:alnum:]]" (string (char-before start)))))
+                     (eq (noteworthy-typst-context) 'math))
+            (let* ((word (buffer-substring-no-properties start end))
+                   (pieces (noteworthy-snippets--split-word word)))
+              (when (and pieces (not (noteworthy-snippets--defined-name-p word)))
+                (goto-char start)
+                (delete-region start end)
+                (insert (mapconcat #'identity pieces " "))))))))))
+
 (defun noteworthy-snippets-setup ()
   "Turn on yasnippet for the current Noteworthy buffer."
   (when (and noteworthy-typst-mode (require 'yasnippet nil t))
@@ -461,7 +556,11 @@ Runs from `post-self-insert-hook\='."
     ;; `(', which it then auto-pairs -- `lim;' became `lim_() -> oo)', an
     ;; unbalanced paren that looked for all the world like a bad snippet.
     (add-hook 'post-self-insert-hook
-              #'noteworthy-snippets-maybe-auto-expand 90 t)))
+              #'noteworthy-snippets-maybe-auto-expand 90 t)
+    ;; After the expansions, so a snippet that fires on the same space
+    ;; (`dx ' -> `dif x ') has already had its say.
+    (add-hook 'post-self-insert-hook
+              #'noteworthy-snippets-maybe-space-word 91 t)))
 
 (add-hook 'noteworthy-typst-mode-hook #'noteworthy-snippets-setup)
 
