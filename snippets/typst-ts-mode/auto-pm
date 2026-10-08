@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: plus-minus
+# key: pm
+# group: math (auto)
+# condition: (noteworthy-typst-auto-word 'math)
+# --
+plus.minus$0
