@@ -191,6 +191,11 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; vector may hold one level of parentheses, `arrow(r_(i))'.
     (:trigger "\\(arrow(\\(?:[^()]\\|([^()]*)\\)*)\\) ?\\(ddot\\|dot\\);"
      :expand noteworthy-snippets-vector-dot :in (math) :max-length 40)
+    ;; `pvecdot' -> `dot(arrow(p))': `pvec' has already become `arrow(p)',
+    ;; and the dot typed straight against it, with no space, is the accent
+    ;; -- the product is written with one, `arrow(a) dot arrow(b)'.
+    (:trigger "\\(arrow(\\(?:[^()]\\|([^()]*)\\)*)\\)\\(ddot\\|dot\\)"
+     :expand noteworthy-snippets-vector-dot :in (math) :max-length 40)
     ;; Postfix accents: xhat -> hat(x).  Typst has no postfix form, so the
     ;; accent has to be typed before its argument -- this puts it back the
     ;; way you think of it.  Longest alternative first, so ddot beats dot.
