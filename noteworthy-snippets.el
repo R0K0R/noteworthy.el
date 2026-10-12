@@ -480,17 +480,70 @@ See `noteworthy-snippets-maybe-space-word'."
      "ell" "hbar" "planck"))
   "Names `noteworthy-snippets-maybe-space-word' splits a word into.")
 
+(defconst noteworthy-snippets--typst-math-scope
+  '("AA" "Alpha" "BB" "Beta" "CC" "Chi" "DD" "Delta" "Dif" "Digamma" "EE"
+    "Epsilon" "Eta" "FF" "GG" "Gamma" "HH" "II" "Im" "Iota" "JJ" "KK"
+    "Kappa" "LL" "Lambda" "MM" "Mu" "NN" "Nu" "OO" "Omega" "Omicron" "PP"
+    "Phi" "Pi" "Pr" "Psi" "QQ" "RR" "Re" "Rho" "SS" "Sha" "Sigma" "TT"
+    "Tau" "Theta" "UU" "Upsilon" "VV" "WW" "XX" "Xi" "YY" "ZZ" "Zeta"
+    "abs" "accent" "acute" "afghani" "aleph" "alpha" "amp" "and" "angle"
+    "angstrom" "angzarr" "approx" "arccos" "arcsin" "arctan" "arg" "arrow"
+    "arrowhead" "arrows" "ast" "asymp" "at" "attach" "backslash" "bag"
+    "baht" "ballot" "bar" "bb" "because" "beta" "beth" "binom" "bitcoin"
+    "bold" "bot" "bowtie" "brace" "bracket" "breve" "bullet" "cal"
+    "cancel" "caret" "caron" "cases" "cc" "cedi" "ceil" "cent" "checkmark"
+    "chevron" "chi" "circle" "class" "co" "colon" "comma" "complement"
+    "compose" "control" "convolve" "copyleft" "copyright" "corner" "cos"
+    "cosh" "cot" "coth" "crossmark" "csc" "csch" "ctg" "currency" "dagger"
+    "daleth" "dash" "deg" "degree" "delta" "det" "diaer" "diameter"
+    "diamond" "die" "dif" "digamma" "dim" "display" "div" "divides"
+    "dollar" "dong" "dorome" "dot" "dotless" "dots" "dram" "earth" "ell"
+    "ellipse" "emptyset" "epsilon" "eq" "equation" "equiv" "errorbar"
+    "eta" "euro" "excl" "exists" "exp" "fence" "flat" "floor" "floral"
+    "forall" "forces" "frac" "frak" "frown" "gamma" "gcd" "gender" "gimel"
+    "gradient" "grave" "gt" "guarani" "harpoon" "harpoons" "hash" "hat"
+    "hexa" "hom" "hourglass" "hryvnia" "hyph" "id" "im" "image" "in" "inf"
+    "infinity" "inline" "integral" "inter" "interleave" "interrobang"
+    "iota" "italic" "join" "jupiter" "kappa" "ker" "kip" "lambda"
+    "laplace" "lari" "lat" "lcm" "lg" "lim" "liminf" "limits" "limsup"
+    "lira" "ln" "log" "lozenge" "lr" "lrm" "lt" "macron" "maltese" "manat"
+    "mapsfrom" "mapsto" "mars" "mat" "max" "med" "mercury" "mid" "min"
+    "minus" "miny" "mod" "models" "mono" "mu" "multimap" "mustache"
+    "nabla" "naira" "natural" "neptune" "norm" "not" "note" "nothing" "nu"
+    "numero" "omega" "omicron" "oo" "op" "or" "original" "overbrace"
+    "overbracket" "overline" "overparen" "overshell" "parallel"
+    "parallelogram" "paren" "partial" "pataca" "pee" "penta" "percent"
+    "permille" "permyriad" "perp" "peso" "phi" "pi" "pilcrow" "planck"
+    "plus" "pound" "power" "prec" "prime" "primes" "product" "prop" "psi"
+    "qed" "quad" "quest" "quote" "ratio" "rect" "refmark" "rest" "rho"
+    "riel" "riyal" "rlm" "root" "round" "ruble" "rupee" "sans" "saturn"
+    "scr" "script" "scripts" "sec" "sech" "section" "semi" "serif" "sha"
+    "sharp" "shekel" "shell" "sigma" "sin" "sinc" "sinh" "slash" "smash"
+    "smile" "smt" "som" "space" "spacebar" "sqrt" "square" "sscript"
+    "star" "stretch" "subset" "succ" "suit" "sum" "sun" "sup" "supset"
+    "tack" "taka" "taman" "tan" "tanh" "tau" "tenge" "text" "tg"
+    "therefore" "theta" "thick" "thin" "tilde" "times" "tiny" "togrog"
+    "top" "tr" "trademark" "triangle" "underbrace" "underbracket"
+    "underline" "underparen" "underscore" "undershell" "union" "upright"
+    "upsilon" "uranus" "vec" "venus" "wide" "without" "wj" "won" "wreath"
+    "xi" "xor" "yen" "yuan" "zero" "zeta" "zwj" "zwnj" "zws")
+  "Every name defined in Typst's math scope, as of Typst 0.15.1.
+A word that is one of these is never split, however it decomposes: `wide\='
+is the wide space, not `w id e\='.  Regenerate with
+  typst eval 'dictionary(math).keys().sorted()'")
+
 (defun noteworthy-snippets--split-word (word)
   "WORD split into known names and single letters, or nil.
-Splits only a word that is not itself a known name, into the fewest
-pieces, of which at least one is a known name of two or more letters --
-so `abc' is left as typed.  Never splits off a lone leading `d', which
-is the differential: `dtheta' is for `d@q'."
+Splits only a word that is not itself a known name or a name in Typst's
+math scope, into the fewest pieces, of which at least one is a known
+name of two or more letters -- so `abc' is left as typed.  Never splits
+off a lone leading `d', which is the differential: `dtheta' is for `d@q'."
   (let* ((n (length word))
          (names noteworthy-snippets--math-names)
          ;; best[i] = fewest-piece split of word[0,i), as a list of pieces
          (best (make-vector (1+ n) nil)))
-    (unless (member word names)
+    (unless (or (member word names)
+                (member word noteworthy-snippets--typst-math-scope))
       (aset best 0 '())
       (dotimes (i n)
         (let ((prefix (aref best i)))
