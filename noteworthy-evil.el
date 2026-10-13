@@ -3,8 +3,6 @@
 (require 'evil)
 (require 'noteworthy-typst)
 
-(declare-function noteworthy-snippets-undo "noteworthy-snippets" ())
-
 (defun noteworthy-typst-smart-o ()
   "Open line below with smart indentation."
   (interactive)
@@ -123,11 +121,6 @@
     ;; holds an image, so the key keeps its ordinary meaning.
     (evil-define-key 'normal noteworthy-typst-mode-map
       "p" #'noteworthy-image-paste-or-yank)
-
-    ;; `u' still undoes; right after an auto-space split it takes back just
-    ;; the split, not everything typed in that insert.
-    (evil-define-key 'normal noteworthy-typst-mode-map
-      "u" #'noteworthy-snippets-undo)
 
     ;; $...$ as a text object, so ci$ / ya$ / di$ work the way they do on
     ;; brackets.  These are evil's global inner/outer maps -- $ has no default

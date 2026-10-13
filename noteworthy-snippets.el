@@ -657,13 +657,40 @@ TICK `buffer-chars-modified-tick' right after.")
 (defvar-local noteworthy-snippets--kept-words nil
   "Words split and then put back by hand: never split again here.")
 
+(defvar evil-undo-list-pointer)
+(defvar undo-auto--last-boundary-cause)
+(declare-function evil-start-undo-step "evil-common" (&optional continue))
+(declare-function evil-end-undo-step "evil-common" (&optional continue))
+
+(defun noteworthy-snippets--as-undo-step (fn)
+  "Call FN as an undo step of its own, between what came before and after.
+So `u' walks back through a split like any other change: what was typed
+after it, then the split alone, then what was typed before.
+
+Two things would otherwise swallow it.  Evil makes one step of a whole
+insert, so that step is closed before FN and a fresh one opened after.
+And the next keystroke would amalgamate into it -- `self-insert-command'
+drops the boundary in front of it when the last command was one too --
+so the record of what caused the last boundary is reset to a command,
+which nothing amalgamates with.  Emacs does not update it itself here:
+it only does so when it adds a boundary, and FN's is already there."
+  (let ((in-evil-step (bound-and-true-p evil-undo-list-pointer)))
+    (if in-evil-step (evil-end-undo-step) (undo-boundary))
+    (funcall fn)
+    (undo-boundary)
+    (setq undo-auto--last-boundary-cause 'command)
+    (when in-evil-step (evil-start-undo-step))))
+
 (defun noteworthy-snippets--replace-word (start end pieces)
-  "Replace START..END with PIECES, a space between each."
+  "Replace START..END with PIECES, a space between each.
+An undo step of its own: see `noteworthy-snippets--as-undo-step'."
   (let ((word (buffer-substring-no-properties start end)))
     (save-excursion
-      (goto-char start)
-      (delete-region start end)
-      (insert (mapconcat #'identity pieces " "))
+      (noteworthy-snippets--as-undo-step
+       (lambda ()
+         (goto-char start)
+         (delete-region start end)
+         (insert (mapconcat #'identity pieces " "))))
       (push (list (copy-marker start) (point-marker) word
                   (buffer-chars-modified-tick))
             noteworthy-snippets--splits)
@@ -739,17 +766,6 @@ and the word is kept from then on."
     (and last
          (= (nth 3 last) (buffer-chars-modified-tick))
          (noteworthy-snippets--split-intact-p last))))
-
-(defun noteworthy-snippets-undo ()
-  "Undo the split just made, or else whatever `u' would otherwise do.
-For `u' in normal state: right after a split -- nothing typed since,
-only Escape -- it takes back the split alone, not the whole insert."
-  (interactive)
-  (if (noteworthy-snippets--split-just-made-p)
-      (noteworthy-snippets-undo-split)
-    (let ((command (let ((noteworthy-typst-mode nil)) (key-binding "u"))))
-      (setq this-command command)
-      (call-interactively command))))
 
 (defun noteworthy-snippets--backspace-undoes-split ()
   "Undo the last split when nothing has been typed since it.
