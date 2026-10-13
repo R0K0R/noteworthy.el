@@ -741,25 +741,6 @@ Only the split: what was typed since stays."
     (unless entry (user-error "No split to undo"))
     (noteworthy-snippets--unsplit entry)))
 
-(defun noteworthy-snippets-unsplit-at-point ()
-  "Undo the auto-space split under the cursor, or else the nearest on its line.
-Any split still intact, however long ago -- only the split is taken back,
-and the word is kept from then on."
-  (interactive)
-  (let* ((pt (point))
-         (splits (noteworthy-snippets--intact-splits))
-         (entry (or (seq-find (lambda (e) (<= (nth 0 e) pt (nth 1 e))) splits)
-                    (car (sort (seq-filter
-                                (lambda (e)
-                                  (and (>= (nth 0 e) (line-beginning-position))
-                                       (<= (nth 1 e) (line-end-position))))
-                                splits)
-                               (lambda (a b)
-                                 (< (min (abs (- pt (nth 0 a))) (abs (- pt (nth 1 a))))
-                                    (min (abs (- pt (nth 0 b))) (abs (- pt (nth 1 b)))))))))))
-    (unless entry (user-error "No split on this line"))
-    (noteworthy-snippets--unsplit entry)))
-
 (defun noteworthy-snippets--split-just-made-p ()
   "Non-nil when nothing has changed since the last split."
   (let ((last (car noteworthy-snippets--splits)))
@@ -905,8 +886,6 @@ Runs from `post-command-hook': `noteworthy-typst-smart-dollar' inserts the
               #'noteworthy-snippets-maybe-space-word-at-dollar nil t)
     (add-hook 'noteworthy-typst-backspace-functions
               #'noteworthy-snippets--backspace-undoes-split nil t)))
-
-(define-key noteworthy-typst-mode-map (kbd "C-c C-u") #'noteworthy-snippets-unsplit-at-point)
 
 (add-hook 'noteworthy-typst-mode-hook #'noteworthy-snippets-setup)
 
