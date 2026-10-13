@@ -24,6 +24,11 @@
 (defvar yas-indent-line)
 (defvar yas-buffer-local-condition)
 (declare-function yas-minor-mode "yasnippet" (&optional arg))
+(declare-function lsp-workspaces "lsp-mode" ())
+(declare-function lsp--get-buffer-diagnostics "lsp-mode" ())
+(declare-function lsp--range-to-region "lsp-mode" (range))
+(declare-function lsp:diagnostic-message "lsp-protocol" (object))
+(declare-function lsp:diagnostic-range "lsp-protocol" (object))
 (declare-function yas-load-directory "yasnippet" (top-level-dir &optional use-jit interactive))
 (declare-function yas-expand-snippet "yasnippet" (snippet &optional start end expand-env))
 (declare-function yas--fetch "yasnippet" (table key))
@@ -530,14 +535,16 @@ See `noteworthy-snippets-maybe-space-word'."
   "Every name defined in Typst's math scope, as of Typst 0.15.1.
 A word that is one of these is never split, however it decomposes: `wide\='
 is the wide space, not `w id e\='.  Regenerate with
-  typst eval 'dictionary(math).keys().sorted()'")
+  typst eval \"dictionary(math).keys().sorted()\"")
 
-(defun noteworthy-snippets--split-word (word)
+(defun noteworthy-snippets--split-word (word &optional unknown)
   "WORD split into known names and single letters, or nil.
 Splits only a word that is not itself a known name or a name in Typst's
 math scope, into the fewest pieces, of which at least one is a known
-name of two or more letters -- so `abc' is left as typed.  Never splits
-off a lone leading `d', which is the differential: `dtheta' is for `d@q'."
+name of two or more letters -- so `abc' is left as typed.  With UNKNOWN,
+Typst has said WORD is undefined, so it splits even into letters alone:
+`xy' becomes `x y'.  Never splits off a lone leading `d', which is the
+differential: `dtheta' is for `d@q'."
   (let* ((n (length word))
          (names noteworthy-snippets--math-names)
          ;; best[i] = fewest-piece split of word[0,i), as a list of pieces
@@ -558,7 +565,8 @@ off a lone leading `d', which is the differential: `dtheta' is for `d@q'."
                       (aset best end cand)))))))))
       (let ((pieces (aref best n)))
         (and (> (length pieces) 1)
-             (seq-some (lambda (p) (and (> (length p) 1) (member p names))) pieces)
+             (or unknown
+                 (seq-some (lambda (p) (and (> (length p) 1) (member p names))) pieces))
              (not (equal (car pieces) "d"))
              pieces)))))
 
@@ -568,31 +576,135 @@ off a lone leading `d', which is the differential: `dtheta' is for `d@q'."
     (goto-char (point-min))
     (re-search-forward (concat "\\_<let[ \t]+" (regexp-quote word) "\\_>") nil t)))
 
+(defvar-local noteworthy-snippets--pending-words nil
+  "Words waiting for the language server to say whether Typst knows them.
+Each is (START END WORD TIME): markers around WORD, and when it was typed.")
+
+(defvar noteworthy-snippets--pending-buffers nil
+  "Buffers with entries in `noteworthy-snippets--pending-words'.")
+
+(defconst noteworthy-snippets--pending-timeout 30
+  "Seconds a word waits for the language server before it is dropped.
+The first compile after opening a big file takes a while -- 14 s for a
+page of math-noteworthy with its plots -- and every later one is fast.")
+
+(defun noteworthy-snippets--lsp-p ()
+  "Non-nil when a language server reports this buffer's diagnostics."
+  (and (bound-and-true-p lsp-mode)
+       (fboundp 'lsp-workspaces)
+       (lsp-workspaces)))
+
+(defun noteworthy-snippets--math-word-before (end)
+  "Bounds (START . END) of the math word ending at END, or nil.
+A run of two or more letters, not after `.' (a field, as in `arrow.r'),
+`#', `_', `\\' or `@', nor glued to a letter or digit before it."
+  (save-excursion
+    (goto-char end)
+    (skip-chars-backward "[:alpha:]")
+    (let ((start (point)))
+      (and (>= (- end start) 2)
+           (not (memq (char-before start) '(?. ?# ?_ ?\\ ?@)))
+           (not (and (char-before start)
+                     (string-match-p "[[:alnum:]]" (string (char-before start)))))
+           (progn (goto-char end) (eq (noteworthy-typst-context) 'math))
+           (cons start end)))))
+
+(defun noteworthy-snippets--replace-word (start end pieces)
+  "Replace START..END with PIECES, a space between each."
+  (save-excursion
+    (goto-char start)
+    (delete-region start end)
+    (insert (mapconcat #'identity pieces " "))))
+
+(defun noteworthy-snippets--consider-word (end)
+  "Split the math word ending at END, now or once Typst has judged it.
+With a language server, the word waits for its diagnostics: Typst says
+`unknown variable' about exactly the words that are not defined -- by a
+`let' here, in an imported template, or by Typst itself -- and only those
+are split.  Without one, words are split by the names this file knows."
+  (when-let* ((bounds (noteworthy-snippets--math-word-before end)))
+    (let ((word (buffer-substring-no-properties (car bounds) (cdr bounds))))
+      (cond
+       ((member word noteworthy-snippets--typst-math-scope))
+       ((noteworthy-snippets--lsp-p)
+        (push (list (copy-marker (car bounds)) (copy-marker (cdr bounds))
+                    word (float-time))
+              noteworthy-snippets--pending-words)
+        (cl-pushnew (current-buffer) noteworthy-snippets--pending-buffers)
+        ;; Typst has usually judged the word already, while it was typed.
+        (noteworthy-snippets--settle-pending))
+       ((> (length word) 2)
+        (let ((pieces (noteworthy-snippets--split-word word)))
+          (when (and pieces (not (noteworthy-snippets--defined-name-p word)))
+            (noteworthy-snippets--replace-word (car bounds) (cdr bounds) pieces))))))))
+
+(defun noteworthy-snippets--unknown-variables ()
+  "Regions Typst reports as an unknown variable, as (START END NAME)."
+  (let (found)
+    (dolist (diag (lsp--get-buffer-diagnostics))
+      (let ((message (lsp:diagnostic-message diag)))
+        (when (string-match "\\`unknown variable: \\([[:alpha:]]+\\)" message)
+          (let ((region (lsp--range-to-region (lsp:diagnostic-range diag))))
+            (push (list (car region) (cdr region) (match-string 1 message))
+                  found)))))
+    found))
+
+(defun noteworthy-snippets--settle-pending ()
+  "Split the pending words Typst has called unknown; drop stale ones."
+  (when noteworthy-snippets--pending-words
+    (let ((unknown (noteworthy-snippets--unknown-variables))
+          (now (float-time))
+          keep)
+      (dolist (entry noteworthy-snippets--pending-words)
+        (pcase-let ((`(,start ,end ,word ,time) entry))
+          (cond
+           ;; Edited since, or gone: nothing to fix any more.
+           ((not (equal (buffer-substring-no-properties start end) word))
+            (set-marker start nil) (set-marker end nil))
+           ((member (list (marker-position start) (marker-position end) word)
+                    unknown)
+            (let ((pieces (noteworthy-snippets--split-word word t)))
+              (when pieces
+                (noteworthy-snippets--replace-word start end pieces)))
+            (set-marker start nil) (set-marker end nil))
+           ((> (- now time) noteworthy-snippets--pending-timeout)
+            (set-marker start nil) (set-marker end nil))
+           (t (push entry keep)))))
+      (setq noteworthy-snippets--pending-words (nreverse keep))))
+  (unless noteworthy-snippets--pending-words
+    (setq noteworthy-snippets--pending-buffers
+          (delq (current-buffer) noteworthy-snippets--pending-buffers))))
+
+(defun noteworthy-snippets--on-diagnostics ()
+  "Settle the pending words in every buffer that has some.
+Runs from `lsp-diagnostics-updated-hook', which is not called from any
+particular buffer."
+  (dolist (buffer noteworthy-snippets--pending-buffers)
+    (if (buffer-live-p buffer)
+        (with-current-buffer buffer (noteworthy-snippets--settle-pending))
+      (setq noteworthy-snippets--pending-buffers
+            (delq buffer noteworthy-snippets--pending-buffers)))))
+
+(with-eval-after-load 'lsp-mode
+  (add-hook 'lsp-diagnostics-updated-hook #'noteworthy-snippets--on-diagnostics))
+
 (defun noteworthy-snippets-maybe-space-word ()
   "Split the math word just finished, if it runs names together.
-The word is finished by a space or a newline.
-Runs from `post-self-insert-hook'.  It is the run of letters
-before the inserted character, not after `.' (a field, as in `arrow.r'),
-`#' or `_' and not a name defined with `let' in this buffer."
+The word is finished by a space or a newline.  Runs from
+`post-self-insert-hook'; see `noteworthy-snippets--consider-word'."
   (when (and noteworthy-snippets-auto-space
              (bound-and-true-p noteworthy-typst-mode)
              (memq last-command-event '(?\s ?\n ?\r)))
-    (save-excursion
-      (backward-char)
-      (let ((end (point)))
-        (skip-chars-backward "[:alpha:]")
-        (let ((start (point)))
-          (when (and (> (- end start) 2)
-                     (not (memq (char-before start) '(?. ?# ?_ ?\\ ?@)))
-                     (not (and (char-before start)
-                               (string-match-p "[[:alnum:]]" (string (char-before start)))))
-                     (eq (noteworthy-typst-context) 'math))
-            (let* ((word (buffer-substring-no-properties start end))
-                   (pieces (noteworthy-snippets--split-word word)))
-              (when (and pieces (not (noteworthy-snippets--defined-name-p word)))
-                (goto-char start)
-                (delete-region start end)
-                (insert (mapconcat #'identity pieces " "))))))))))
+    (noteworthy-snippets--consider-word (1- (point)))))
+
+(defun noteworthy-snippets-maybe-space-word-at-dollar ()
+  "Split the math word the closing `$' just finished, as `$xy$'.
+Runs from `post-command-hook': `noteworthy-typst-smart-dollar' inserts the
+`$' itself, or steps over the paired one, so no self-insert is seen."
+  (when (and noteworthy-snippets-auto-space
+             (eq this-command 'noteworthy-typst-smart-dollar)
+             (eq (char-before) ?$))
+    (noteworthy-snippets--consider-word (1- (point)))))
 
 (defun noteworthy-snippets-setup ()
   "Turn on yasnippet for the current Noteworthy buffer."
@@ -618,7 +730,9 @@ before the inserted character, not after `.' (a field, as in `arrow.r'),
     ;; After the expansions, so a snippet that fires on the same space
     ;; (`dx ' -> `dif x ') has already had its say.
     (add-hook 'post-self-insert-hook
-              #'noteworthy-snippets-maybe-space-word 91 t)))
+              #'noteworthy-snippets-maybe-space-word 91 t)
+    (add-hook 'post-command-hook
+              #'noteworthy-snippets-maybe-space-word-at-dollar nil t)))
 
 (add-hook 'noteworthy-typst-mode-hook #'noteworthy-snippets-setup)
 
