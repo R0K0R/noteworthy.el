@@ -31,6 +31,7 @@
 (declare-function lsp:diagnostic-range "lsp-protocol" (object))
 (declare-function yas-load-directory "yasnippet" (top-level-dir &optional use-jit interactive))
 (declare-function yas-expand-snippet "yasnippet" (snippet &optional start end expand-env))
+(declare-function yas-exit-all-snippets "yasnippet" ())
 (declare-function yas--fetch "yasnippet" (table key))
 (declare-function yas--get-snippet-tables "yasnippet" (&optional mode))
 (declare-function yas--template-p "yasnippet" (obj))
@@ -155,6 +156,12 @@ it starts a word."
   '(("GREEK" . "alpha\\|beta\\|gamma\\|delta\\|epsilon\\|zeta\\|eta\\|theta\\|\
 iota\\|kappa\\|lambda\\|mu\\|nu\\|xi\\|pi\\|rho\\|sigma\\|tau\\|upsilon\\|\
 phi\\|chi\\|psi\\|omega")
+    ;; An accent or a style already applied, holding up to three levels of
+    ;; parentheses: `hat(x)', `dot(arrow(r_(i)))'.
+    ("ACCENTED" . "\\(?:dot\\.double\\|dot\\|hat\\|bar\\|tilde\\|arrow\\|\
+underline\\|overline\\|bb\\|cal\\|frak\\|bold\\|upright\\|sans\\|mono\\)\
+(\\(?:[^()]\\|(\\(?:[^()]\\|(\\(?:[^()]\\|([^()]*)\\)*)\\)*)\\)*)")
+    ("ACCENTED_BODY" . "\\(?:[^()]\\|(\\(?:[^()]\\|(\\(?:[^()]\\|([^()]*)\\)*)\\)*)\\)*")
     ("LETTER" . "[A-Za-z]")
     ("DIGIT"  . "[0-9]"))
   "Named fragments usable as ${NAME} inside a rule's `:trigger'.
@@ -180,11 +187,11 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; spelled-out greek letter has to step over that space.
     (:trigger "\\(${GREEK}\\) \\(${DIGIT}\\)" :expand "\\1_\\2" :in (math))
     ;; `ddot' -> `dot.double()' over what it follows, with or without a
-    ;; space: `xddot', `x ddot', `@qddot', `pvec ddot'.  Unlike `dot' it is
-    ;; never the product, so it needs no `;'.  Ahead of the postfix accents,
-    ;; which would read `xddot' as x beside `dot(d)'.
-    (:trigger "\\(arrow(\\(?:[^()]\\|([^()]*)\\)*)\\) ?\\(ddot\\)"
-     :expand noteworthy-snippets-vector-dot :in (math) :max-length 40)
+    ;; space: `xddot', `x ddot', `@qddot', `pvec ddot', `xhat ddot'.  Unlike
+    ;; `dot' it is never the product, so it needs no `;'.  Ahead of the
+    ;; postfix accents, which would read `xddot' as x beside `dot(d)'.
+    (:trigger "\\(${ACCENTED}\\) ?\\(ddot\\)"
+     :expand noteworthy-snippets-nested-accent :in (math) :max-length 80)
     (:trigger "\\(^\\|[^[:alnum:]_.#@]\\)\\([[:alpha:]]+\\) ?ddot"
      :expand "\\1dot.double(\\2)$0" :in (math) :max-length 40)
     ;; `@qarr' -> `arrow(theta)'.  The postfix accents below need a letter
@@ -198,19 +205,26 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; A digit or letter run raised or lowered as a group: x_12 -> x_(12)
     (:trigger "\\(${LETTER}\\)_\\(${DIGIT}${DIGIT}+\\)" :expand "\\1_(\\2)" :in (math))
     ;; `dot;' -> `dot()' over what it follows: `arrow(r) dot;', `@qdot;',
-    ;; `x dot;'.  `dot' after something with a space is the product, as in
-    ;; `arrow(a) dot arrow(b)', until the `;' says otherwise.  The vector may
-    ;; hold one level of parentheses, `arrow(r_(i))'.
-    (:trigger "\\(arrow(\\(?:[^()]\\|([^()]*)\\)*)\\) ?\\(dot\\);"
-     :expand noteworthy-snippets-vector-dot :in (math) :max-length 40)
+    ;; `x dot;', `xhat dot;'.  `dot' after something with a space is the
+    ;; product, as in `arrow(a) dot arrow(b)', until the `;' says otherwise.
+    (:trigger "\\(${ACCENTED}\\) ?\\(dot\\);"
+     :expand noteworthy-snippets-nested-accent :in (math) :max-length 80)
     (:trigger "\\(^\\|[^[:alnum:]_.#@]\\)\\([[:alpha:]]+\\) ?dot;"
      :expand "\\1dot(\\2)$0" :in (math) :max-length 40)
-    ;; Glued, `pvecdot' and `xdot' are no product and expand at once; a `;'
-    ;; typed after them anyway is the same `dot;' and is dropped.
-    (:trigger "\\(arrow(\\(?:[^()]\\|([^()]*)\\)*)\\)\\(dot\\)"
-     :expand noteworthy-snippets-vector-dot :in (math) :max-length 40)
-    (:trigger "\\(dot(\\(?:[^()]\\|([^()]*)\\)*)\\);"
-     :expand noteworthy-snippets-dot-semicolon :in (math) :max-length 60)
+    ;; Accents stack: one typed glued after another, or after a style, goes
+    ;; over it -- `xhatdot' -> `dot(hat(x))', `pvechat' -> `hat(arrow(p))',
+    ;; `bbRtil' -> `tilde(bb(R))'.  Glued, `dot' is no product.
+    (:trigger "\\(${ACCENTED}\\)\\(ddot\\|dot\\|hat\\|bar\\|til\\|vec\\|arr\\|und\\|ovl\\)"
+     :expand noteworthy-snippets-nested-accent :in (math) :max-length 80)
+    ;; A `;' typed after a glued `dot' that already expanded is the same
+    ;; `dot;' and is dropped.
+    (:trigger "\\(dot(${ACCENTED_BODY})\\);"
+     :expand noteworthy-snippets-dot-semicolon :in (math) :max-length 80)
+    ;; `rdot' -> `dot(r)'.  The glued power `rd' fires on its second
+    ;; letter, before the `ot' can show it was r with a dot; `ot' or `dot'
+    ;; typed straight into the `^()' it left takes it back.
+    (:trigger "\\^(\\(d?\\)ot"
+     :expand noteworthy-snippets-rd-dot :in (math))
     ;; Postfix accents: xhat -> hat(x).  Typst has no postfix form, so the
     ;; accent has to be typed before its argument -- this puts it back the
     ;; way you think of it.  Longest alternative first, so ddot beats dot.
@@ -319,14 +333,27 @@ become `alphab\='.  The space is the separator you would type anyway."
 `vec\\=' gives `arrow\\=' on purpose: in Typst `vec()\\=' is a column vector, and
 the arrow accent -- what LaTeX Suite spells `\\vec\\=' -- is `arrow()\\='.")
 
-(defun noteworthy-snippets-vector-dot (groups)
-  "Put the dot accent named in GROUPS over the vector in GROUPS."
+(defun noteworthy-snippets-nested-accent (groups)
+  "Put the accent keyed in GROUPS over the accented thing in GROUPS."
   (format "%s(%s)$0"
-          (if (equal (nth 1 groups) "ddot") "dot.double" "dot")
+          (cdr (assoc (nth 1 groups) noteworthy-snippets--accents))
           (nth 0 groups)))
 
 (defvar-local noteworthy-snippets--last-end nil
   "Where the last auto-expansion left point, as a marker.")
+
+(defun noteworthy-snippets-rd-dot (groups)
+  "Turn the `^(ot\=' left by `rd\=' then `ot\=' into `dot(r)\='.
+GROUPS holds the `d\=' of `rddot\=', if any.  Only while the `^()\=' is
+the one the last expansion left, with nothing typed since but the rest
+of the accent; the empty field's `)\=' after point goes with it."
+  (let ((double (equal (nth 0 groups) "d")))
+    (when (and (noteworthy-snippets--just-expanded-p (if double 3 2))
+               (eq (char-after) ?\)))
+      ;; Exiting moves point to the snippet's exit, past the `)'.
+      (save-excursion (yas-exit-all-snippets))
+      (delete-char 1)
+      (format "%s(r)$0" (if double "dot.double" "dot")))))
 
 (defun noteworthy-snippets-dot-semicolon (groups)
   "Drop the `;' typed right after a dot accent that has already expanded.
@@ -344,7 +371,7 @@ the same `dot;' as everywhere else, not as a semicolon."
 (defun noteworthy-snippets-accent (groups)
   "Wrap the letter in GROUPS with the accent function it was suffixed with.
 Declines `ddot' right after a closing parenthesis: that is a vector's
-`ddot;' (`noteworthy-snippets-vector-dot') being typed, not a variable d
+`ddot' (`noteworthy-snippets-nested-accent') being typed, not a variable d
 with a dot."
   (let ((fn (cdr (assoc (nth 1 groups) noteworthy-snippets--accents))))
     (and fn
