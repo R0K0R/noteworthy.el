@@ -179,37 +179,37 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; without a trailing space.  Now that it ends with one, subscripting a
     ;; spelled-out greek letter has to step over that space.
     (:trigger "\\(${GREEK}\\) \\(${DIGIT}\\)" :expand "\\1_\\2" :in (math))
+    ;; `ddot' -> `dot.double()' over what it follows, with or without a
+    ;; space: `xddot', `x ddot', `@qddot', `pvec ddot'.  Unlike `dot' it is
+    ;; never the product, so it needs no `;'.  Ahead of the postfix accents,
+    ;; which would read `xddot' as x beside `dot(d)'.
+    (:trigger "\\(arrow(\\(?:[^()]\\|([^()]*)\\)*)\\) ?\\(ddot\\)"
+     :expand noteworthy-snippets-vector-dot :in (math) :max-length 40)
+    (:trigger "\\(^\\|[^[:alnum:]_.#@]\\)\\([[:alpha:]]+\\) ?ddot"
+     :expand "\\1dot.double(\\2)$0" :in (math) :max-length 40)
     ;; `@qarr' -> `arrow(theta)'.  The postfix accents below need a letter
     ;; glued to the accent, and `@q' leaves `theta ' with its space, so a
     ;; greek letter gets a rule of its own.  Only straight after the `@'
     ;; expansion, so a `theta' typed out and followed by `hat' later is left
     ;; alone.  `dot' is left out: `alpha dot beta' is the multiplication dot,
-    ;; the far likelier thing to type there.
-    (:trigger "\\(^\\|[^[:alpha:]]\\)\\([[:alpha:]]+\\) \\(ddot\\|hat\\|bar\\|til\\|vec\\|arr\\|und\\|ovl\\)"
+    ;; the far likelier thing to type there, and `ddot' has a rule above.
+    (:trigger "\\(^\\|[^[:alpha:]]\\)\\([[:alpha:]]+\\) \\(hat\\|bar\\|til\\|vec\\|arr\\|und\\|ovl\\)"
      :expand noteworthy-snippets-greek-accent :in (math))
     ;; A digit or letter run raised or lowered as a group: x_12 -> x_(12)
     (:trigger "\\(${LETTER}\\)_\\(${DIGIT}${DIGIT}+\\)" :expand "\\1_(\\2)" :in (math))
-    ;; `arrow(r) dot;' -> `dot(arrow(r))': the time derivative of a vector,
-    ;; which the postfix accents below cannot reach -- they take a single
-    ;; letter, and a vector ends in `)'.  The `;' says so; without it, `dot'
-    ;; after a vector is the product, as in `arrow(a) dot arrow(b)'.  The
-    ;; vector may hold one level of parentheses, `arrow(r_(i))'.
-    (:trigger "\\(arrow(\\(?:[^()]\\|([^()]*)\\)*)\\) ?\\(ddot\\|dot\\);"
+    ;; `dot;' -> `dot()' over what it follows: `arrow(r) dot;', `@qdot;',
+    ;; `x dot;'.  `dot' after something with a space is the product, as in
+    ;; `arrow(a) dot arrow(b)', until the `;' says otherwise.  The vector may
+    ;; hold one level of parentheses, `arrow(r_(i))'.
+    (:trigger "\\(arrow(\\(?:[^()]\\|([^()]*)\\)*)\\) ?\\(dot\\);"
      :expand noteworthy-snippets-vector-dot :in (math) :max-length 40)
-    ;; `pvecdot' -> `dot(arrow(p))': `pvec' has already become `arrow(p)',
-    ;; and the dot typed straight against it, with no space, is the accent
-    ;; -- the product is written with one, `arrow(a) dot arrow(b)'.
-    (:trigger "\\(arrow(\\(?:[^()]\\|([^()]*)\\)*)\\)\\(ddot\\|dot\\)"
+    (:trigger "\\(^\\|[^[:alnum:]_.#@]\\)\\([[:alpha:]]+\\) ?dot;"
+     :expand "\\1dot(\\2)$0" :in (math) :max-length 40)
+    ;; Glued, `pvecdot' and `xdot' are no product and expand at once; a `;'
+    ;; typed after them anyway is the same `dot;' and is dropped.
+    (:trigger "\\(arrow(\\(?:[^()]\\|([^()]*)\\)*)\\)\\(dot\\)"
      :expand noteworthy-snippets-vector-dot :in (math) :max-length 40)
-    ;; `@qdot;' -> `dot(theta)', `x dot;' -> `dot(x)': the same `;' over a
-    ;; name.  `dot' after a name is the product until the `;' says otherwise,
-    ;; which is why `@qarr' style accents leave it out.  `ddot' has usually
-    ;; fired on its own by then -- `@qddot' straight away, `x ddot' as
-    ;; `x dot(d)' -- so the `;' finishes those too, see
-    ;; `noteworthy-snippets-name-dot'.
-    (:trigger "\\(^\\|[^[:alnum:]_.#@]\\)\\([[:alpha:]]+\\)\\( ?ddot\\| ?dot\\| dot(d)\\);"
-     :expand noteworthy-snippets-name-dot :in (math) :max-length 40)
-    (:trigger "\\(\\(?:dot\\|dot\\.double\\)(\\(?:[^()]\\|([^()]*)\\)*)\\);"
+    (:trigger "\\(dot(\\(?:[^()]\\|([^()]*)\\)*)\\);"
      :expand noteworthy-snippets-dot-semicolon :in (math) :max-length 60)
     ;; Postfix accents: xhat -> hat(x).  Typst has no postfix form, so the
     ;; accent has to be typed before its argument -- this puts it back the
@@ -328,21 +328,9 @@ the arrow accent -- what LaTeX Suite spells `\\vec\\=' -- is `arrow()\\='.")
 (defvar-local noteworthy-snippets--last-end nil
   "Where the last auto-expansion left point, as a marker.")
 
-(defun noteworthy-snippets-name-dot (groups)
-  "Put the dot accent in GROUPS over the name in GROUPS, for `name dot;'.
-GROUPS is the character before the name, the name and what follows it.
-` dot(d)' is `ddot' already taken by the postfix rule, and is only
-reclaimed while it is what the last expansion left."
-  (let ((tail (string-trim-left (nth 2 groups))))
-    (and (or (not (equal tail "dot(d)"))
-             (noteworthy-snippets--just-expanded-p 1))
-         (format "%s%s(%s)$0" (nth 0 groups)
-                 (if (equal tail "dot") "dot" "dot.double")
-                 (nth 1 groups)))))
-
 (defun noteworthy-snippets-dot-semicolon (groups)
   "Drop the `;' typed right after a dot accent that has already expanded.
-`@qddot;' and `pvecdot;' expand before the `;' arrives; it was meant as
+`xdot;' and `pvecdot;' expand before the `;' arrives; it was meant as
 the same `dot;' as everywhere else, not as a semicolon."
   (and (noteworthy-snippets--just-expanded-p 1)
        (concat (nth 0 groups) "$0")))
