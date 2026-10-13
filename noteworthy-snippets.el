@@ -658,8 +658,15 @@ are split.  Without one, words are split by the names this file knows."
       (dolist (entry noteworthy-snippets--pending-words)
         (pcase-let ((`(,start ,end ,word ,time) entry))
           (cond
-           ;; Edited since, or gone: nothing to fix any more.
-           ((not (equal (buffer-substring-no-properties start end) word))
+           ;; Edited since, or gone: nothing to fix any more.  Letters added
+           ;; at either end land outside the markers, so check those too --
+           ;; `co' taken back up into `cos' still reads `co' between them,
+           ;; and a diagnostic from the moment it was `co' would split it.
+           ((not (and (equal (buffer-substring-no-properties start end) word)
+                      (not (and (char-after end)
+                                (string-match-p "[[:alnum:]_]" (string (char-after end)))))
+                      (not (and (char-before start)
+                                (string-match-p "[[:alnum:]_]" (string (char-before start)))))))
             (set-marker start nil) (set-marker end nil))
            ((member (list (marker-position start) (marker-position end) word)
                     unknown)
