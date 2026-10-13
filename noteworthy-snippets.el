@@ -201,6 +201,16 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; -- the product is written with one, `arrow(a) dot arrow(b)'.
     (:trigger "\\(arrow(\\(?:[^()]\\|([^()]*)\\)*)\\)\\(ddot\\|dot\\)"
      :expand noteworthy-snippets-vector-dot :in (math) :max-length 40)
+    ;; `@qdot;' -> `dot(theta)', `x dot;' -> `dot(x)': the same `;' over a
+    ;; name.  `dot' after a name is the product until the `;' says otherwise,
+    ;; which is why `@qarr' style accents leave it out.  `ddot' has usually
+    ;; fired on its own by then -- `@qddot' straight away, `x ddot' as
+    ;; `x dot(d)' -- so the `;' finishes those too, see
+    ;; `noteworthy-snippets-name-dot'.
+    (:trigger "\\(^\\|[^[:alnum:]_.#@]\\)\\([[:alpha:]]+\\)\\( ?ddot\\| ?dot\\| dot(d)\\);"
+     :expand noteworthy-snippets-name-dot :in (math) :max-length 40)
+    (:trigger "\\(\\(?:dot\\|dot\\.double\\)(\\(?:[^()]\\|([^()]*)\\)*)\\);"
+     :expand noteworthy-snippets-dot-semicolon :in (math) :max-length 60)
     ;; Postfix accents: xhat -> hat(x).  Typst has no postfix form, so the
     ;; accent has to be typed before its argument -- this puts it back the
     ;; way you think of it.  Longest alternative first, so ddot beats dot.
@@ -315,6 +325,34 @@ the arrow accent -- what LaTeX Suite spells `\\vec\\=' -- is `arrow()\\='.")
           (if (equal (nth 1 groups) "ddot") "dot.double" "dot")
           (nth 0 groups)))
 
+(defvar-local noteworthy-snippets--last-end nil
+  "Where the last auto-expansion left point, as a marker.")
+
+(defun noteworthy-snippets-name-dot (groups)
+  "Put the dot accent in GROUPS over the name in GROUPS, for `name dot;'.
+GROUPS is the character before the name, the name and what follows it.
+` dot(d)' is `ddot' already taken by the postfix rule, and is only
+reclaimed while it is what the last expansion left."
+  (let ((tail (string-trim-left (nth 2 groups))))
+    (and (or (not (equal tail "dot(d)"))
+             (noteworthy-snippets--just-expanded-p 1))
+         (format "%s%s(%s)$0" (nth 0 groups)
+                 (if (equal tail "dot") "dot" "dot.double")
+                 (nth 1 groups)))))
+
+(defun noteworthy-snippets-dot-semicolon (groups)
+  "Drop the `;' typed right after a dot accent that has already expanded.
+`@qddot;' and `pvecdot;' expand before the `;' arrives; it was meant as
+the same `dot;' as everywhere else, not as a semicolon."
+  (and (noteworthy-snippets--just-expanded-p 1)
+       (concat (nth 0 groups) "$0")))
+
+(defun noteworthy-snippets--just-expanded-p (n)
+  "Non-nil if the last auto-expansion ended N characters before point."
+  (and (markerp noteworthy-snippets--last-end)
+       (eq (marker-buffer noteworthy-snippets--last-end) (current-buffer))
+       (= (marker-position noteworthy-snippets--last-end) (- (point) n))))
+
 (defun noteworthy-snippets-accent (groups)
   "Wrap the letter in GROUPS with the accent function it was suffixed with.
 Declines `ddot' right after a closing parenthesis: that is a vector's
@@ -327,9 +365,6 @@ with a dot."
                      (goto-char (- (point) 4))
                      (looking-back ") ?" (max (point-min) (- (point) 2))))))
          (format "%s(%s)$0" fn (nth 0 groups)))))
-
-(defvar-local noteworthy-snippets--last-end nil
-  "Where the last auto-expansion left point, as a marker.")
 
 (defun noteworthy-snippets-greek-accent (groups)
   "Wrap the greek letter in GROUPS with its accent, right after `@'.
