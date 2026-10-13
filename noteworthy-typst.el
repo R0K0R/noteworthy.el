@@ -777,12 +777,19 @@ block math as readily as inline."
    (t
     (insert "`"))))
 
+(defvar noteworthy-typst-backspace-functions nil
+  "Functions `noteworthy-typst-smart-backspace' tries before deleting.
+Each is called with no arguments; the first to return non-nil has
+handled the key, and nothing is deleted.")
+
 (defun noteworthy-typst-smart-backspace ()
-  "Delete matching pairs on backspace."
+  "Delete matching pairs on backspace.
+Tries `noteworthy-typst-backspace-functions' first."
   (interactive)
   (let ((char-before (char-before))
         (char-after (char-after)))
     (cond
+     ((run-hook-with-args-until-success 'noteworthy-typst-backspace-functions))
      ((and char-before char-after
            (or (and (eq char-before ?*) (eq char-after ?*))
                (and (eq char-before ?_) (eq char-after ?_))

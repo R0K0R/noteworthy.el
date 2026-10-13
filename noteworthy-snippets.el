@@ -563,12 +563,49 @@ differential: `dtheta' is for `d@q'."
                         (have (aref best end)))
                     (when (or (null have) (< (length cand) (length have)))
                       (aset best end cand)))))))))
-      (let ((pieces (aref best n)))
+      (let* ((pieces (aref best n))
+             (named (seq-some (lambda (p) (and (> (length p) 1) (member p names)))
+                              pieces)))
         (and (> (length pieces) 1)
-             (or unknown
-                 (seq-some (lambda (p) (and (> (length p) 1) (member p names))) pieces))
+             (if named
+                 ;; `cos t h t a' is `costheta' misspelt, not a cosine of
+                 ;; four variables.  Two letters after a name is as far as
+                 ;; a real product goes: `sinxy'.
+                 (not (noteworthy-snippets--letter-run-p pieces 3))
+               ;; Letters alone only for a short word Typst does not know,
+               ;; `xy' or `abc' -- a longer one is a typo (`lamda') or a
+               ;; word (`rain'), and splitting it would hide the error.
+               (and unknown
+                    (<= n 3)
+                    (not (noteworthy-snippets--near-name-p word))))
              (not (equal (car pieces) "d"))
              pieces)))))
+
+(defun noteworthy-snippets--letter-run-p (pieces n)
+  "Non-nil when PIECES has N single letters in a row."
+  (let ((run 0) found)
+    (dolist (p pieces)
+      (setq run (if (= (length p) 1) (1+ run) 0))
+      (when (>= run n) (setq found t)))
+    found))
+
+(defun noteworthy-snippets--near-name-p (word)
+  "Non-nil when WORD is one edit from a Typst name as long as it.
+`sni' and `tna' are `sin' and `tan' mistyped, not three variables.  Only
+names of WORD's own length, so `xy' is never taken for `xi'."
+  (and (>= (length word) 3)
+       (seq-some (lambda (name)
+                   (and (= (length name) (length word))
+                        (let ((diff (cl-loop for a across word for b across name
+                                             count (/= a b))))
+                          (or (= diff 1)
+                              ;; two neighbours swapped
+                              (and (= diff 2)
+                                   (cl-loop for i below (1- (length word))
+                                            thereis (and (/= (aref word i) (aref name i))
+                                                         (= (aref word i) (aref name (1+ i)))
+                                                         (= (aref word (1+ i)) (aref name i)))))))))
+                 noteworthy-snippets--typst-math-scope)))
 
 (defun noteworthy-snippets--defined-name-p (word)
   "Non-nil when WORD is bound with `let' somewhere in this buffer."
@@ -609,12 +646,56 @@ A run of two or more letters, not after `.' (a field, as in `arrow.r'),
            (progn (goto-char end) (eq (noteworthy-typst-context) 'math))
            (cons start end)))))
 
+(defvar-local noteworthy-snippets--last-split nil
+  "The last split, as (START END WORD TICK).
+START and END are markers around the split text, WORD what it replaced,
+TICK `buffer-chars-modified-tick' right after.")
+
+(defvar-local noteworthy-snippets--kept-words nil
+  "Words split and then put back by hand: never split again here.")
+
 (defun noteworthy-snippets--replace-word (start end pieces)
   "Replace START..END with PIECES, a space between each."
-  (save-excursion
-    (goto-char start)
-    (delete-region start end)
-    (insert (mapconcat #'identity pieces " "))))
+  (let ((word (buffer-substring-no-properties start end)))
+    (save-excursion
+      (goto-char start)
+      (delete-region start end)
+      (insert (mapconcat #'identity pieces " "))
+      (setq noteworthy-snippets--last-split
+            (list (copy-marker start) (point-marker) word
+                  (buffer-chars-modified-tick))))))
+
+(defun noteworthy-snippets-undo-split ()
+  "Put back the word the last auto-space split, and keep it from now on.
+Only that split: what was typed since stays."
+  (interactive)
+  (pcase-let ((`(,start ,end ,word ,_) noteworthy-snippets--last-split))
+    (if (not (and start (marker-buffer start)
+                  (string-search " " (buffer-substring-no-properties start end))
+                  (equal (replace-regexp-in-string
+                          " " "" (buffer-substring-no-properties start end))
+                         word)))
+        (user-error "No split to undo")
+      (save-excursion
+        (goto-char start)
+        (delete-region start end)
+        (insert word))
+      (cl-pushnew word noteworthy-snippets--kept-words :test #'equal)
+      (setq noteworthy-snippets--last-split nil)
+      (message "Kept `%s' as typed" word)
+      t)))
+
+(defun noteworthy-snippets--backspace-undoes-split ()
+  "Undo the last split when nothing has been typed since it.
+On `noteworthy-typst-backspace-functions': backspace straight after a
+split puts the word back, the way an autocorrect is taken back."
+  (and noteworthy-snippets--last-split
+       (= (nth 3 noteworthy-snippets--last-split) (buffer-chars-modified-tick))
+       ;; Right behind it, or behind the space or `$' that finished it --
+       ;; not a backspace somewhere else the cursor has since moved to.
+       (<= (nth 1 noteworthy-snippets--last-split) (point)
+           (1+ (nth 1 noteworthy-snippets--last-split)))
+       (noteworthy-snippets-undo-split)))
 
 (defun noteworthy-snippets--consider-word (end)
   "Split the math word ending at END, now or once Typst has judged it.
@@ -626,6 +707,7 @@ are split.  Without one, words are split by the names this file knows."
     (let ((word (buffer-substring-no-properties (car bounds) (cdr bounds))))
       (cond
        ((member word noteworthy-snippets--typst-math-scope))
+       ((member word noteworthy-snippets--kept-words))
        ((noteworthy-snippets--lsp-p)
         (push (list (copy-marker (car bounds)) (copy-marker (cdr bounds))
                     word (float-time))
@@ -739,7 +821,9 @@ Runs from `post-command-hook': `noteworthy-typst-smart-dollar' inserts the
     (add-hook 'post-self-insert-hook
               #'noteworthy-snippets-maybe-space-word 91 t)
     (add-hook 'post-command-hook
-              #'noteworthy-snippets-maybe-space-word-at-dollar nil t)))
+              #'noteworthy-snippets-maybe-space-word-at-dollar nil t)
+    (add-hook 'noteworthy-typst-backspace-functions
+              #'noteworthy-snippets--backspace-undoes-split nil t)))
 
 (add-hook 'noteworthy-typst-mode-hook #'noteworthy-snippets-setup)
 
