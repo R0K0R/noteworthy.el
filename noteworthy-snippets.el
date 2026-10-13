@@ -646,10 +646,13 @@ A run of two or more letters, not after `.' (a field, as in `arrow.r'),
            (progn (goto-char end) (eq (noteworthy-typst-context) 'math))
            (cons start end)))))
 
-(defvar-local noteworthy-snippets--last-split nil
-  "The last split, as (START END WORD TICK).
+(defvar-local noteworthy-snippets--splits nil
+  "Recent splits, newest first, each (START END WORD TICK).
 START and END are markers around the split text, WORD what it replaced,
 TICK `buffer-chars-modified-tick' right after.")
+
+(defconst noteworthy-snippets--splits-max 50
+  "How many splits `noteworthy-snippets-undo-split' can walk back through.")
 
 (defvar-local noteworthy-snippets--kept-words nil
   "Words split and then put back by hand: never split again here.")
@@ -661,27 +664,44 @@ TICK `buffer-chars-modified-tick' right after.")
       (goto-char start)
       (delete-region start end)
       (insert (mapconcat #'identity pieces " "))
-      (setq noteworthy-snippets--last-split
-            (list (copy-marker start) (point-marker) word
-                  (buffer-chars-modified-tick))))))
+      (push (list (copy-marker start) (point-marker) word
+                  (buffer-chars-modified-tick))
+            noteworthy-snippets--splits)
+      (when-let* ((old (nthcdr noteworthy-snippets--splits-max
+                               noteworthy-snippets--splits)))
+        (dolist (entry old)
+          (set-marker (nth 0 entry) nil) (set-marker (nth 1 entry) nil))
+        (setcdr (nthcdr (1- noteworthy-snippets--splits-max)
+                        noteworthy-snippets--splits)
+                nil)))))
+
+(defun noteworthy-snippets--split-intact-p (entry)
+  "Non-nil when the split in ENTRY still reads as it was left."
+  (pcase-let ((`(,start ,end ,word ,_) entry))
+    (and (marker-buffer start)
+         (let ((text (buffer-substring-no-properties start end)))
+           (and (string-search " " text)
+                (equal (replace-regexp-in-string " " "" text) word))))))
 
 (defun noteworthy-snippets-undo-split ()
-  "Put back the word the last auto-space split, and keep it from now on.
-Only that split: what was typed since stays."
+  "Undo the most recent auto-space split, and keep that word from now on.
+Only the split: what was typed since stays.  Called again, it walks back
+through earlier splits; one edited since is skipped."
   (interactive)
-  (pcase-let ((`(,start ,end ,word ,_) noteworthy-snippets--last-split))
-    (if (not (and start (marker-buffer start)
-                  (string-search " " (buffer-substring-no-properties start end))
-                  (equal (replace-regexp-in-string
-                          " " "" (buffer-substring-no-properties start end))
-                         word)))
-        (user-error "No split to undo")
+  (let (entry)
+    (while (and noteworthy-snippets--splits (not entry))
+      (let ((next (pop noteworthy-snippets--splits)))
+        (if (noteworthy-snippets--split-intact-p next)
+            (setq entry next)
+          (set-marker (nth 0 next) nil) (set-marker (nth 1 next) nil))))
+    (unless entry (user-error "No split to undo"))
+    (pcase-let ((`(,start ,end ,word ,_) entry))
       (save-excursion
         (goto-char start)
         (delete-region start end)
         (insert word))
+      (set-marker start nil) (set-marker end nil)
       (cl-pushnew word noteworthy-snippets--kept-words :test #'equal)
-      (setq noteworthy-snippets--last-split nil)
       (message "Kept `%s' as typed" word)
       t)))
 
@@ -689,13 +709,13 @@ Only that split: what was typed since stays."
   "Undo the last split when nothing has been typed since it.
 On `noteworthy-typst-backspace-functions': backspace straight after a
 split puts the word back, the way an autocorrect is taken back."
-  (and noteworthy-snippets--last-split
-       (= (nth 3 noteworthy-snippets--last-split) (buffer-chars-modified-tick))
-       ;; Right behind it, or behind the space or `$' that finished it --
-       ;; not a backspace somewhere else the cursor has since moved to.
-       (<= (nth 1 noteworthy-snippets--last-split) (point)
-           (1+ (nth 1 noteworthy-snippets--last-split)))
-       (noteworthy-snippets-undo-split)))
+  (let ((last (car noteworthy-snippets--splits)))
+    (and last
+         (= (nth 3 last) (buffer-chars-modified-tick))
+         ;; Right behind it, or behind the space or `$' that finished it --
+         ;; not a backspace somewhere else the cursor has since moved to.
+         (<= (nth 1 last) (point) (1+ (nth 1 last)))
+         (noteworthy-snippets-undo-split))))
 
 (defun noteworthy-snippets--consider-word (end)
   "Split the math word ending at END, now or once Typst has judged it.
@@ -824,6 +844,8 @@ Runs from `post-command-hook': `noteworthy-typst-smart-dollar' inserts the
               #'noteworthy-snippets-maybe-space-word-at-dollar nil t)
     (add-hook 'noteworthy-typst-backspace-functions
               #'noteworthy-snippets--backspace-undoes-split nil t)))
+
+(define-key noteworthy-typst-mode-map (kbd "C-c C-u") #'noteworthy-snippets-undo-split)
 
 (add-hook 'noteworthy-typst-mode-hook #'noteworthy-snippets-setup)
 
