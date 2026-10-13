@@ -229,13 +229,19 @@ This is the single source of truth for the pairing gate and for the
            (vague (or (= (treesit-node-start node) (treesit-node-end node))
                       (equal (treesit-node-type node) "parbreak")))
            (in-code nil)
-           ;; Past the last character `treesit-node-at\=' cannot return the
-           ;; node after point, there is none, so it returns the one before
-           ;; -- the closing `$\=' of the formula above the empty last line,
-           ;; which then reads as math and stops `$\=' pairing.  A node that
-           ;; ends before point says nothing about what point is in.
-           (result (and (< (treesit-node-start node) (treesit-node-end node) (1+ pt))
-                        (noteworthy-typst--textual-context))))
+           (result nil))
+      ;; In whitespace with nothing after it on the line, `treesit-node-at\='
+      ;; returns the token before point, which says nothing about what point
+      ;; is in.  Climb to the node that does contain point: on an empty line
+      ;; of a display formula that is the formula.  Past the last character
+      ;; nothing contains it -- the closing `$\=' of the formula above the
+      ;; empty last line would otherwise read as math and stop `$\=' pairing
+      ;; -- so the text decides.
+      (when (< (treesit-node-start node) (treesit-node-end node) (1+ pt))
+        (while (and node (<= (treesit-node-end node) pt))
+          (setq node (treesit-node-parent node)))
+        (unless node
+          (setq result (noteworthy-typst--textual-context))))
       (while (and node (null result))
         (let ((type (treesit-node-type node)))
           (when (and (member type noteworthy-typst--code-node-types)
