@@ -25,10 +25,9 @@
 (defvar yas-buffer-local-condition)
 (declare-function yas-minor-mode "yasnippet" (&optional arg))
 (declare-function lsp-workspaces "lsp-mode" ())
-(declare-function lsp--get-buffer-diagnostics "lsp-mode" ())
-(declare-function lsp--range-to-region "lsp-mode" (range))
-(declare-function lsp:diagnostic-message "lsp-protocol" (object))
-(declare-function lsp:diagnostic-range "lsp-protocol" (object))
+(declare-function lsp-feature? "lsp-mode" (feature))
+(declare-function lsp-request-async "lsp-mode" (method params callback &rest args))
+(declare-function lsp--text-document-position-params "lsp-mode" (&optional identifier position))
 (declare-function yas-load-directory "yasnippet" (top-level-dir &optional use-jit interactive))
 (declare-function yas-expand-snippet "yasnippet" (snippet &optional start end expand-env))
 (declare-function yas-exit-all-snippets "yasnippet" ())
@@ -508,6 +507,12 @@ Runs from `post-self-insert-hook\='."
 ;; writing names together makes it easy to type.  When a word is finished
 ;; with a space or a newline, a word that is no name Typst knows but
 ;; splits wholly into names it does know gets the spaces put in.
+;;
+;; What Typst knows comes from the language server when there is one:
+;; tinymist completes every name in scope at a math word -- Typst's own,
+;; the template's, this file's `let's -- and keeps doing so through syntax
+;; errors.  The list is fetched while Emacs is idle and kept, so a word is
+;; judged the moment it is finished, never later.
 
 (defcustom noteworthy-snippets-auto-space t
   "Whether math words like `costheta' are split into `cos theta' as you type.
@@ -663,20 +668,16 @@ names of WORD's own length, so `xy' is never taken for `xi'."
     (goto-char (point-min))
     (re-search-forward (concat "\\_<let[ \t]+" (regexp-quote word) "\\_>") nil t)))
 
-(defvar-local noteworthy-snippets--pending-words nil
-  "Words waiting for the language server to say whether Typst knows them.
-Each is (START END WORD TIME): markers around WORD, and when it was typed.")
+(defvar-local noteworthy-snippets--scope-names nil
+  "Names in scope in this buffer's math, as the language server completes
+them: a hash table, or nil until it has answered.")
 
-(defvar noteworthy-snippets--pending-buffers nil
-  "Buffers with entries in `noteworthy-snippets--pending-words'.")
-
-(defconst noteworthy-snippets--pending-timeout 30
-  "Seconds a word waits for the language server before it is dropped.
-The first compile after opening a big file takes a while -- 14 s for a
-page of math-noteworthy with its plots -- and every later one is fast.")
+(defvar-local noteworthy-snippets--scope-tick nil
+  "`buffer-chars-modified-tick' when `noteworthy-snippets--scope-names' was
+last asked for.")
 
 (defun noteworthy-snippets--lsp-p ()
-  "Non-nil when a language server reports this buffer's diagnostics."
+  "Non-nil when a language server is attached to this buffer."
   (and (bound-and-true-p lsp-mode)
        (fboundp 'lsp-workspaces)
        (lsp-workspaces)))
@@ -826,83 +827,103 @@ split puts the word back, the way an autocorrect is taken back."
          (noteworthy-snippets-undo-split))))
 
 (defun noteworthy-snippets--consider-word (end)
-  "Split the math word ending at END, now or once Typst has judged it.
-With a language server, the word waits for its diagnostics: Typst says
-`unknown variable' about exactly the words that are not defined -- by a
-`let' here, in an imported template, or by Typst itself -- and only those
-are split.  Without one, words are split by the names this file knows."
+  "Split the math word ending at END if it is no name in scope.
+With the language server's names, any word that is not one of them is
+split -- `xy' too, which is two variables.  Without them, only words that
+split into known names and are not bound by a `let' in this file."
   (when-let* ((bounds (noteworthy-snippets--math-word-before end)))
     (let ((word (buffer-substring-no-properties (car bounds) (cdr bounds))))
       (cond
        ((member word noteworthy-snippets--typst-math-scope))
-       ((noteworthy-snippets--lsp-p)
-        (push (list (copy-marker (car bounds)) (copy-marker (cdr bounds))
-                    word (float-time))
-              noteworthy-snippets--pending-words)
-        (cl-pushnew (current-buffer) noteworthy-snippets--pending-buffers)
-        ;; Typst has usually judged the word already, while it was typed.
-        (noteworthy-snippets--settle-pending))
+       (noteworthy-snippets--scope-names
+        (unless (or (gethash word noteworthy-snippets--scope-names)
+                    ;; Defined since the names were fetched, or below the
+                    ;; word, where Typst's scope does not reach yet.
+                    (noteworthy-snippets--defined-name-p word))
+          (when-let* ((pieces (noteworthy-snippets--split-word word t)))
+            (noteworthy-snippets--replace-word (car bounds) (cdr bounds) pieces))))
        ((> (length word) 2)
         (let ((pieces (noteworthy-snippets--split-word word)))
           (when (and pieces (not (noteworthy-snippets--defined-name-p word)))
             (noteworthy-snippets--replace-word (car bounds) (cdr bounds) pieces))))))))
 
-(defun noteworthy-snippets--unknown-variables ()
-  "Regions Typst reports as an unknown variable, as (START END NAME)."
-  (let (found)
-    (dolist (diag (lsp--get-buffer-diagnostics))
-      (let ((message (lsp:diagnostic-message diag)))
-        (when (string-match "\\`unknown variable: \\([[:alpha:]]+\\)" message)
-          (let ((region (lsp--range-to-region (lsp:diagnostic-range diag))))
-            (push (list (car region) (cdr region) (match-string 1 message))
-                  found)))))
+(defun noteworthy-snippets--scope-probe ()
+  "A position just after a one-letter math word, as the `x' in `x + 1', or nil.
+Completing there gives every name in scope; after the first letter of a
+longer word the server filters by it.  The word nearest point before it,
+else after it, so the names are the ones in scope here."
+  (let ((re "\\(?:^\\|[^[:alnum:]_.#@\\]\\)\\([[:alpha:]]\\)\\(?:[^[:alnum:]_]\\|$\\)")
+        found)
+    (save-excursion
+      (cl-loop repeat 50
+               while (and (not found) (re-search-backward re nil t))
+               do (save-excursion
+                    (goto-char (match-end 1))
+                    (when (eq (noteworthy-typst-context) 'math)
+                      (setq found (point))))))
+    (save-excursion
+      (cl-loop repeat 50
+               while (and (not found) (re-search-forward re nil t))
+               do (save-excursion
+                    (goto-char (match-end 1))
+                    (when (eq (noteworthy-typst-context) 'math)
+                      (setq found (point))))
+               ;; The character after the letter may begin the next match.
+               do (goto-char (match-end 1))))
     found))
 
-(defun noteworthy-snippets--settle-pending ()
-  "Split the pending words Typst has called unknown; drop stale ones."
-  (when noteworthy-snippets--pending-words
-    (let ((unknown (noteworthy-snippets--unknown-variables))
-          (now (float-time))
-          keep)
-      (dolist (entry noteworthy-snippets--pending-words)
-        (pcase-let ((`(,start ,end ,word ,time) entry))
-          (cond
-           ;; Edited since, or gone: nothing to fix any more.  Letters added
-           ;; at either end land outside the markers, so check those too --
-           ;; `co' taken back up into `cos' still reads `co' between them,
-           ;; and a diagnostic from the moment it was `co' would split it.
-           ((not (and (equal (buffer-substring-no-properties start end) word)
-                      (not (and (char-after end)
-                                (string-match-p "[[:alnum:]_]" (string (char-after end)))))
-                      (not (and (char-before start)
-                                (string-match-p "[[:alnum:]_]" (string (char-before start)))))))
-            (set-marker start nil) (set-marker end nil))
-           ((member (list (marker-position start) (marker-position end) word)
-                    unknown)
-            (let ((pieces (noteworthy-snippets--split-word word t)))
-              (when pieces
-                (noteworthy-snippets--replace-word start end pieces)))
-            (set-marker start nil) (set-marker end nil))
-           ((> (- now time) noteworthy-snippets--pending-timeout)
-            (set-marker start nil) (set-marker end nil))
-           (t (push entry keep)))))
-      (setq noteworthy-snippets--pending-words (nreverse keep))))
-  (unless noteworthy-snippets--pending-words
-    (setq noteworthy-snippets--pending-buffers
-          (delq (current-buffer) noteworthy-snippets--pending-buffers))))
+(defun noteworthy-snippets--json-get (object key)
+  "KEY of a JSON OBJECT as lsp-mode parsed it, a hash table or a plist."
+  (if (hash-table-p object)
+      (gethash (substring (symbol-name key) 1) object)
+    (plist-get object key)))
 
-(defun noteworthy-snippets--on-diagnostics ()
-  "Settle the pending words in every buffer that has some.
-Runs from `lsp-diagnostics-updated-hook', which is not called from any
-particular buffer."
-  (dolist (buffer noteworthy-snippets--pending-buffers)
-    (if (buffer-live-p buffer)
-        (with-current-buffer buffer (noteworthy-snippets--settle-pending))
-      (setq noteworthy-snippets--pending-buffers
-            (delq buffer noteworthy-snippets--pending-buffers)))))
+(defun noteworthy-snippets--store-scope (result)
+  "Keep the names in the completion RESULT as this buffer's scope."
+  (let ((items (if (or (vectorp result) (and (listp result) (not (keywordp (car result)))))
+                   result
+                 (noteworthy-snippets--json-get result :items)))
+        (names (make-hash-table :test #'equal)))
+    (seq-doseq (item items)
+      (when-let* ((label (noteworthy-snippets--json-get item :label)))
+        (puthash label t names)))
+    ;; An empty answer is a probe that went wrong, not a scope with nothing
+    ;; in it: Typst alone has hundreds of names.
+    (when (> (hash-table-count names) 0)
+      (setq noteworthy-snippets--scope-names names))))
 
-(with-eval-after-load 'lsp-mode
-  (add-hook 'lsp-diagnostics-updated-hook #'noteworthy-snippets--on-diagnostics))
+(defun noteworthy-snippets--refresh-scope ()
+  "Ask the language server for the names in scope, if the buffer changed."
+  (when (and noteworthy-snippets-auto-space
+             (bound-and-true-p noteworthy-typst-mode)
+             (noteworthy-snippets--lsp-p)
+             ;; Not while the server is still starting up.
+             (lsp-feature? "textDocument/completion")
+             (not (eql noteworthy-snippets--scope-tick (buffer-chars-modified-tick))))
+    (when-let* ((pos (noteworthy-snippets--scope-probe)))
+      (setq noteworthy-snippets--scope-tick (buffer-chars-modified-tick))
+      (let ((buffer (current-buffer)))
+        (lsp-request-async
+         "textDocument/completion"
+         (append (save-excursion
+                   (goto-char pos)
+                   (lsp--text-document-position-params))
+                 '(:context (:triggerKind 1)))
+         (lambda (result)
+           (when (buffer-live-p buffer)
+             (with-current-buffer buffer
+               (noteworthy-snippets--store-scope result))))
+         :mode 'alive)))))
+
+(defvar noteworthy-snippets--scope-timer nil
+  "Idle timer running `noteworthy-snippets--refresh-scope'.")
+
+(defun noteworthy-snippets--refresh-scope-idle ()
+  "Refresh the scope of the current buffer; errors are only reported."
+  (condition-case err
+      (noteworthy-snippets--refresh-scope)
+    (error (message "Noteworthy: fetching math names failed: %s"
+                    (error-message-string err)))))
 
 (defun noteworthy-snippets-maybe-space-word ()
   "Split the math word just finished, if it runs names together.
@@ -950,7 +971,10 @@ Runs from `post-command-hook': `noteworthy-typst-smart-dollar' inserts the
     (add-hook 'post-command-hook
               #'noteworthy-snippets-maybe-space-word-at-dollar nil t)
     (add-hook 'noteworthy-typst-backspace-functions
-              #'noteworthy-snippets--backspace-undoes-split nil t)))
+              #'noteworthy-snippets--backspace-undoes-split nil t)
+    (unless noteworthy-snippets--scope-timer
+      (setq noteworthy-snippets--scope-timer
+            (run-with-idle-timer 0.5 t #'noteworthy-snippets--refresh-scope-idle)))))
 
 (define-key noteworthy-typst-mode-map (kbd "C-c C-u") #'noteworthy-snippets-unsplit-at-point)
 
