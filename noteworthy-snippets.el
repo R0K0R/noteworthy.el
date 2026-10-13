@@ -351,8 +351,8 @@ of the accent; the empty field's `)\=' after point goes with it."
                (eq (char-after) ?\)))
       ;; Exiting moves point to the snippet's exit, past the `)'.
       (save-excursion (yas-exit-all-snippets))
-      (delete-char 1)
-      (format "%s(r)$0" (if double "dot.double" "dot")))))
+      (list (format "%s(r)$0" (if double "dot.double" "dot"))
+            (1+ (point))))))
 
 (defun noteworthy-snippets-dot-semicolon (groups)
   "Drop the `;' typed right after a dot accent that has already expanded.
@@ -438,8 +438,10 @@ the `eta', and it has no capitals."
                         (template (if (functionp expand)
                                       (funcall expand groups)
                                     (noteworthy-snippets--substitute expand groups))))
-                   (when template
-                     (list template start (point)))))))))
+                   ;; An expander may also take text after point, as
+                   ;; (TEMPLATE END).
+                   (cond ((consp template) (list (car template) start (cadr template)))
+                         (template (list template start (point))))))))))
 
 (defun noteworthy-snippets--fieldless-p (template)
   "Non-nil when TEMPLATE has no tabstop other than $0.
@@ -490,9 +492,11 @@ Runs from `post-self-insert-hook\='."
                    (content (if (yas--template-p template)
                                 (yas--template-content template)
                               template)))
-              (if (noteworthy-snippets--fieldless-p content)
-                  (noteworthy-snippets--expand-plain content (nth 1 hit) (nth 2 hit))
-                (yas-expand-snippet template (nth 1 hit) (nth 2 hit)))
+              (noteworthy-snippets--as-undo-step
+               (lambda ()
+                 (if (noteworthy-snippets--fieldless-p content)
+                     (noteworthy-snippets--expand-plain content (nth 1 hit) (nth 2 hit))
+                   (yas-expand-snippet template (nth 1 hit) (nth 2 hit)))))
               (if (markerp noteworthy-snippets--last-end)
                   (set-marker noteworthy-snippets--last-end (point))
                 (setq noteworthy-snippets--last-end (point-marker))))))
@@ -712,8 +716,9 @@ TICK `buffer-chars-modified-tick' right after.")
 
 (defun noteworthy-snippets--as-undo-step (fn)
   "Call FN as an undo step of its own, between what came before and after.
-So `u' walks back through a split like any other change: what was typed
-after it, then the split alone, then what was typed before.
+So `u' walks back through a split or a snippet expansion like any other
+change: what was typed after it, then it alone, then what was typed
+before -- for an expansion, back to the key that triggered it.
 
 Two things would otherwise swallow it.  Evil makes one step of a whole
 insert, so that step is closed before FN and a fresh one opened after.
@@ -807,24 +812,6 @@ and the word goes back as it was typed."
                                     (min (abs (- pt (nth 0 b))) (abs (- pt (nth 1 b)))))))))))
     (unless entry (user-error "No split on this line"))
     (noteworthy-snippets--unsplit entry)))
-
-(defun noteworthy-snippets--split-just-made-p ()
-  "Non-nil when nothing has changed since the last split."
-  (let ((last (car noteworthy-snippets--splits)))
-    (and last
-         (= (nth 3 last) (buffer-chars-modified-tick))
-         (noteworthy-snippets--split-intact-p last))))
-
-(defun noteworthy-snippets--backspace-undoes-split ()
-  "Undo the last split when nothing has been typed since it.
-On `noteworthy-typst-backspace-functions': backspace straight after a
-split puts the word back, the way an autocorrect is taken back."
-  (let ((last (car noteworthy-snippets--splits)))
-    (and (noteworthy-snippets--split-just-made-p)
-         ;; Right behind it, or behind the space or `$' that finished it --
-         ;; not a backspace somewhere else the cursor has since moved to.
-         (<= (nth 1 last) (point) (1+ (nth 1 last)))
-         (noteworthy-snippets-undo-split))))
 
 (defun noteworthy-snippets--consider-word (end)
   "Split the math word ending at END if it is no name in scope.
@@ -970,8 +957,6 @@ Runs from `post-command-hook': `noteworthy-typst-smart-dollar' inserts the
               #'noteworthy-snippets-maybe-space-word 91 t)
     (add-hook 'post-command-hook
               #'noteworthy-snippets-maybe-space-word-at-dollar nil t)
-    (add-hook 'noteworthy-typst-backspace-functions
-              #'noteworthy-snippets--backspace-undoes-split nil t)
     (unless noteworthy-snippets--scope-timer
       (setq noteworthy-snippets--scope-timer
             (run-with-idle-timer 0.5 t #'noteworthy-snippets--refresh-scope-idle)))))
