@@ -100,12 +100,27 @@ and never expand.  Character classes do not consult the syntax table.")
   "Return non-nil when KEY beginning at START is not glued to a word.
 
 A key that begins like an identifier has to begin one, or an auto key
-like `sin\=' would fire in the middle of `arcsin\='.  Keys that begin with
-punctuation carry their own boundary, so they are always allowed."
+like `sin\=' would fire in the middle of `arcsin\='.  After a `.\=' it is a
+symbol's variant, as in `subset.sq\=', and no word of its own either.  Keys
+that begin with punctuation carry their own boundary, so they are always
+allowed."
   (or (not (string-match-p (concat "\\`" noteworthy-snippets--identifier-rx) key))
       (<= start (point-min))
-      (not (string-match-p noteworthy-snippets--identifier-rx
+      (not (string-match-p (concat noteworthy-snippets--identifier-rx "\\|\\.")
                            (string (char-before start))))))
+
+(defun noteworthy-snippets--in-variant-p (start)
+  "Non-nil when START is inside a symbol variant like `amp.inv\='.
+A key that fires anywhere, glued to what it follows, would otherwise
+take the `inv\=' of `amp.inv\=' or the `rd\=' of `space.third\='.  The
+word has to start with a letter, so the `5\=' of `2.5sr\=' is no variant."
+  (save-excursion
+    (goto-char start)
+    (skip-chars-backward "[:alnum:]_")
+    (and (eq (char-before) ?.)
+         (looking-at-p "[[:alpha:]]")
+         (> (1- (point)) (point-min))
+         (string-match-p "[[:alnum:]_]" (string (char-before (1- (point))))))))
 
 (defun noteworthy-snippets--lookup (key requirement)
   "Return the one live template for KEY under REQUIREMENT, or nil.
@@ -138,7 +153,8 @@ it starts a word."
                     (- (point) noteworthy-snippets-auto-key-max-length))))
     (cl-loop for start from floor below end
              for key = (buffer-substring-no-properties start end)
-             for hit = (or (noteworthy-snippets--lookup key 'auto)
+             for hit = (or (and (not (noteworthy-snippets--in-variant-p start))
+                                (noteworthy-snippets--lookup key 'auto))
                            (and (noteworthy-snippets--key-boundary-ok-p key start)
                                 (noteworthy-snippets--lookup key 'auto-word)))
              when hit return (list hit start end))))
@@ -154,7 +170,8 @@ it starts a word."
 (defcustom noteworthy-snippets-regex-variables
   '(("GREEK" . "alpha\\|beta\\|gamma\\|delta\\|epsilon\\|zeta\\|eta\\|theta\\|\
 iota\\|kappa\\|lambda\\|mu\\|nu\\|xi\\|pi\\|rho\\|sigma\\|tau\\|upsilon\\|\
-phi\\|chi\\|psi\\|omega")
+phi\\|chi\\|psi\\|omega\\|Gamma\\|Delta\\|Theta\\|Lambda\\|Xi\\|Pi\\|\
+Sigma\\|Upsilon\\|Phi\\|Psi\\|Omega")
     ;; An accent or a style already applied, holding up to three levels of
     ;; parentheses: `hat(x)', `dot(arrow(r_(i)))'.
     ("ACCENTED" . "\\(?:dot\\.double\\|dot\\|hat\\|bar\\|tilde\\|arrow\\|\
@@ -169,7 +186,13 @@ The LaTeX Suite equivalent of its snippet variables."
   :group 'noteworthy)
 
 (defcustom noteworthy-snippets-regex-rules
-  '(;; x1 -> x_1, and alpha1 -> alpha_1, since the match is anchored at point
+  '(;; `int', `prod' and `pm' fire as soon as they are typed, so typing
+    ;; `integral', `product' or `inter' out in full met them halfway:
+    ;; `integralegral'.  A letter typed straight after one was the rest of
+    ;; a longer word, and takes the expansion back.
+    (:trigger "\\(integral\\|product\\|plus\\.minus\\)\\([[:alpha:]]\\)"
+     :expand noteworthy-snippets-unexpand-word :in (math) :max-length 20)
+    ;; x1 -> x_1, and alpha1 -> alpha_1, since the match is anchored at point
     (:trigger "\\(${LETTER}\\)\\(${DIGIT}\\)" :expand "\\1_\\2" :in (math))
     ;; @a -> alpha.  Typst spells the greek letters out, so this is purely
     ;; keystrokes; the table is the rule's own business.
@@ -224,14 +247,19 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; typed straight into the `^()' it left takes it back.
     (:trigger "\\^(\\(d?\\)ot"
      :expand noteworthy-snippets-rd-dot :in (math))
+    ;; The same for `sq': `sqrt' and `square' typed out leave `sqrt(rt)'
+    ;; and `sqrt(ua)', neither of them anything you would put in a root.
+    (:trigger "sqrt(\\(rt\\|ua\\)"
+     :expand noteworthy-snippets-sq-word :in (math))
     ;; Postfix accents: xhat -> hat(x).  Typst has no postfix form, so the
     ;; accent has to be typed before its argument -- this puts it back the
     ;; way you think of it.  Longest alternative first, so ddot beats dot.
     (:trigger "\\(${LETTER}\\)\\(ddot\\|dot\\|hat\\|bar\\|til\\|vec\\|arr\\|und\\|ovl\\)"
-     :expand noteworthy-snippets-accent :in (math))
+     :expand noteworthy-snippets-postfix-accent :in (math))
     ;; Postfix styles: bbR -> bb(R).  The captured name is the function.
-    (:trigger "\\(bb\\|cal\\|frak\\|bold\\|upright\\|sans\\|mono\\)\\(${LETTER}\\)"
-     :expand "\\1(\\2)$0" :in (math))
+    ;; Only as a word of its own, not the end of `focal' or `local'.
+    (:trigger "\\(^\\|[^[:alpha:]_.]\\)\\(bb\\|cal\\|frak\\|bold\\|upright\\|sans\\|mono\\)\\(${LETTER}\\)"
+     :expand "\\1\\2(\\3)$0" :in (math))
     ;; `xsq\=' -> `x sqrt()\='.  The keyed `sq\=' has to start a word, so glued to
     ;; a variable it never fired at all -- and letting it fire glued without
     ;; the space would give `xsqrt(2)\=', one identifier Typst does not have
@@ -354,6 +382,26 @@ of the accent; the empty field's `)\=' after point goes with it."
       (list (format "%s(r)$0" (if double "dot.double" "dot"))
             (1+ (point))))))
 
+(defun noteworthy-snippets-sq-word (groups)
+  "Turn `sqrt(rt\=' or `sqrt(ua\=' back into the `sqrt\=' or `squa\=' typed.
+GROUPS holds the letters typed into the root's empty field, and only
+while nothing else has been."
+  (when (and (noteworthy-snippets--just-expanded-p 2)
+             (eq (char-after) ?\)))
+    (save-excursion (yas-exit-all-snippets))
+    (list (concat "sq" (nth 0 groups) "$0") (1+ (point)))))
+
+(defconst noteworthy-snippets--word-keys
+  '(("integral" . "int") ("product" . "prod") ("plus.minus" . "pm"))
+  "Expansions of keyed snippets that begin longer words, and their keys.")
+
+(defun noteworthy-snippets-unexpand-word (groups)
+  "Put back the key whose expansion GROUPS has a letter glued to.
+Only straight after the expansion: `integrale\=' typed then is `inte\='."
+  (and (noteworthy-snippets--just-expanded-p 1)
+       (concat (cdr (assoc (nth 0 groups) noteworthy-snippets--word-keys))
+               (nth 1 groups))))
+
 (defun noteworthy-snippets-dot-semicolon (groups)
   "Drop the `;' typed right after a dot accent that has already expanded.
 `xdot;' and `pvecdot;' expand before the `;' arrives; it was meant as
@@ -380,6 +428,14 @@ with a dot."
                      (looking-back ") ?" (max (point-min) (- (point) 2))))))
          (format "%s(%s)$0" fn (nth 0 groups)))))
 
+(defun noteworthy-snippets-postfix-accent (groups)
+  "`noteworthy-snippets-accent\=', for a letter that is a word of its own.
+The `o\=' of `pound\=' is no variable to underline, nor the `n\=' of
+`arrow.r.narrow\=' one to arrow."
+  (let ((before (char-before (- (point) (length (nth 1 groups)) 1))))
+    (and (not (and before (string-match-p "[[:alpha:].]" (string before))))
+         (noteworthy-snippets-accent groups))))
+
 (defun noteworthy-snippets-greek-accent (groups)
   "Wrap the greek letter in GROUPS with its accent, right after `@'.
 GROUPS is the character before the name, put back as it was, the name and
@@ -396,7 +452,8 @@ the `eta', and it has no capitals."
          (eq (marker-buffer noteworthy-snippets--last-end) (current-buffer))
          (= (marker-position noteworthy-snippets--last-end)
             (- (point) (length accent)))
-         (concat (nth 0 groups) (noteworthy-snippets-accent (cdr groups))))))
+         (when-let* ((wrapped (noteworthy-snippets-accent (cdr groups))))
+           (concat (nth 0 groups) wrapped)))))
 
 (defun noteworthy-snippets--expand-variables (trigger)
   "Substitute ${NAME} fragments into TRIGGER."
@@ -417,7 +474,9 @@ the `eta', and it has no capitals."
 
 (defun noteworthy-snippets--regex-hit ()
   "Return (TEMPLATE START END) for the first regex rule matching at point."
-  (let ((context (noteworthy-typst-context)))
+  (let ((context (noteworthy-typst-context))
+        ;; `Dx ' is no differential, nor is `DD' -- Typst's double-struck D.
+        (case-fold-search nil))
     (cl-loop for rule in noteworthy-snippets-regex-rules
              when (memq context (plist-get rule :in))
              thereis
