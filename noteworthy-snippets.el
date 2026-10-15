@@ -186,13 +186,11 @@ The LaTeX Suite equivalent of its snippet variables."
   :group 'noteworthy)
 
 (defcustom noteworthy-snippets-regex-rules
-  '(;; `int' and `pm' fire as soon as they are typed, which is the point
-    ;; of them -- but `inter', `interleave' and `pmat' begin with them.
+  '(;; `int' fires as soon as it is typed, which is the point of it --
+    ;; but `inter' and `interleave' begin with it.
     ;; What is typed straight after the expansion shows it was the longer
     ;; word, and takes the expansion back: `integraler' -> `inter'.
     (:trigger "\\(integral\\)\\(er\\)"
-     :expand noteworthy-snippets-unexpand-word :in (math) :max-length 20)
-    (:trigger "\\(plus\\.minus\\)\\([[:alpha:]]\\)"
      :expand noteworthy-snippets-unexpand-word :in (math) :max-length 20)
     ;; x1 -> x_1, and alpha1 -> alpha_1, since the match is anchored at point
     (:trigger "\\(${LETTER}\\)\\(${DIGIT}\\)" :expand "\\1_\\2" :in (math))
@@ -397,7 +395,7 @@ typed into it since."
     (list "squa$0" (1+ (point)))))
 
 (defconst noteworthy-snippets--word-keys
-  '(("integral" . "int") ("plus.minus" . "pm"))
+  '(("integral" . "int"))
   "Expansions of keyed snippets that begin longer words, and their keys.")
 
 (defun noteworthy-snippets-unexpand-word (groups)
