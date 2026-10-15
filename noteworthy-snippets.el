@@ -283,23 +283,28 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; first for being the longer key.  They cannot actually collide: the
     ;; `d\=' rules need a non-alphanumeric in front of the d, and `pd\=' puts a
     ;; p there.
-    (:trigger "\\(^\\|[^[:alnum:]_-]\\)pd\\(${LETTER}\\)\\([ ,)]\\)"
+    (:trigger "\\(^\\|[^[:alnum:]_-]\\)pd\\(${LETTER}\\)\\([ ,]\\)"
      :expand "\\1partial \\2\\3" :in (math))
     (:trigger "\\(^\\|[^[:alnum:]_-]\\)pd\\(${LETTER}\\);"
-     :expand "\\1(partial \\2)" :in (math))
+     :expand "\\1partial \\2 " :in (math))
+    (:trigger "\\(^\\|[^[:alnum:]_-]\\)\\(pd\\)\\(${LETTER}\\))"
+     :expand noteworthy-snippets-bracketed-differential :in (math))
     ;; The boundary is spelled out rather than written `\\b\=': `$\=' has word
     ;; syntax in the standard table, so `$dx\=' reads as one word and `\\b\='
     ;; never matches after the dollar -- the differential at the very start
     ;; of a formula, which is where it most often sits.  Group 1 is that
     ;; boundary character, put straight back.
-    (:trigger "\\(^\\|[^[:alnum:]_-]\\)d\\(${LETTER}\\)\\([ ,)]\\)"
+    (:trigger "\\(^\\|[^[:alnum:]_-]\\)d\\(${LETTER}\\)\\([ ,]\\)"
      :expand "\\1dif \\2\\3" :in (math))
-    ;; `dx;' -> `(dif x)', for where the differential needs bracketing --
-    ;; inside a fraction or under a power.  `dv;' and friends already build
-    ;; the whole derivative, and being keyed they are tried first, so `dv;'
-    ;; stays the fraction and only the other letters reach this rule.
+    ;; `dx;' -> `dif x ', for not typing the space, and `dx)' -> `(dif x)',
+    ;; for where the differential needs bracketing -- inside a fraction or
+    ;; under a power.  `dv;' and friends already build the whole
+    ;; derivative, and being keyed they are tried first, so `dv;' stays the
+    ;; fraction and only the other letters reach these rules.
     (:trigger "\\(^\\|[^[:alnum:]_-]\\)d\\(${LETTER}\\);"
-     :expand "\\1(dif \\2)" :in (math))
+     :expand "\\1dif \\2 " :in (math))
+    (:trigger "\\(^\\|[^[:alnum:]_-]\\)\\(d\\)\\(${LETTER}\\))"
+     :expand noteworthy-snippets-bracketed-differential :in (math))
     ;; `dx/' -> `(dif x)/', and `pdx/' -> `(partial x)/'.  A slash makes a
     ;; fraction of the operand in front of it, and `dif x/' would put only
     ;; the x on top.  The slash is kept.
@@ -343,6 +348,18 @@ whatever you type next is a different identifier -- `@ab\=' would have to
 become `alphab\='.  The space is the separator you would type anyway."
   (when-let* ((name (cdr (assoc (car groups) noteworthy-snippets--greek))))
     (concat name " ")))
+
+(defun noteworthy-snippets-bracketed-differential (groups)
+  "Expand GROUPS -- boundary, `d\=' or `pd\=', letter -- to `(dif x)\='.
+When the `)\=' typed closes a `(\=' before it -- `e^(dx)\=', or one the
+editor paired and stepped over -- that pair already brackets it, and
+it is `e^(dif x)\='."
+  (let ((dif (format "%s %s" (if (equal (nth 1 groups) "pd") "partial" "dif")
+                     (nth 2 groups))))
+    ;; `syntax-ppss' leaves point where it parsed to.
+    (if (> (car (save-excursion (syntax-ppss (1- (point))))) 0)
+        (format "%s%s)" (nth 0 groups) dif)
+      (format "%s(%s)" (nth 0 groups) dif))))
 
 (defun noteworthy-snippets-greek-differential (groups)
   "Expand GROUPS -- boundary, `d' or `pd', letter -- to a greek differential."
@@ -658,6 +675,24 @@ A word that is one of these is never split, however it decomposes: `wide\='
 is the wide space, not `w id e\='.  Regenerate with
   typst eval \"dictionary(math).keys().sorted()\"")
 
+(defconst noteworthy-snippets--never-pieces '("at" "co" "wj")
+  "Names in scope that a word is never split into.
+Typst's `@\=', `c/o\=' and word joiner: two letters that turn up inside
+ordinary words far more often than they are meant.")
+
+(defvar noteworthy-snippets--scope-names)
+
+(defun noteworthy-snippets--name-piece-p (piece)
+  "Non-nil when PIECE is a name a word may be split into.
+The names the language server has given, when it has -- so `xinA\=' is
+`x in A\=' and a `let\=' from the template is found inside a word too --
+and always `noteworthy-snippets--math-names\='."
+  (or (member piece noteworthy-snippets--math-names)
+      (and noteworthy-snippets--scope-names
+           (> (length piece) 1)
+           (gethash piece noteworthy-snippets--scope-names)
+           (not (member piece noteworthy-snippets--never-pieces)))))
+
 (defun noteworthy-snippets--split-word (word &optional unknown)
   "WORD split into known names and single letters, or nil.
 Splits only a word that is not itself a known name or a name in Typst's
@@ -679,13 +714,14 @@ differential: `dtheta' is for `d@q'."
             (dolist (len (number-sequence 1 (- n i)))
               (let ((piece (substring word i (+ i len)))
                     (end (+ i len)))
-                (when (or (member piece names) (= len 1))
+                (when (or (= len 1) (noteworthy-snippets--name-piece-p piece))
                   (let ((cand (append prefix (list piece)))
                         (have (aref best end)))
                     (when (or (null have) (< (length cand) (length have)))
                       (aset best end cand)))))))))
       (let* ((pieces (aref best n))
-             (named (seq-some (lambda (p) (and (> (length p) 1) (member p names)))
+             (named (seq-some (lambda (p) (and (> (length p) 1)
+                                                (noteworthy-snippets--name-piece-p p)))
                               pieces)))
         (and (> (length pieces) 1)
              (if named
@@ -976,11 +1012,16 @@ else after it, so the names are the ones in scope here."
 
 (defun noteworthy-snippets-maybe-space-word ()
   "Split the math word just finished, if it runs names together.
-The word is finished by a space or a newline.  Runs from
+The word is finished by anything that is no letter, digit or `.\=' -- a
+space, but just as well the `^\=' of `costheta^2\=' or the `+\=' of `ab+c\=',
+so a word never waits for a space.  Not by a character a snippet has
+already taken: `dx;\=' is no word and a `;\='.  Runs from
 `post-self-insert-hook'; see `noteworthy-snippets--consider-word'."
   (when (and noteworthy-snippets-auto-space
              (bound-and-true-p noteworthy-typst-mode)
-             (memq last-command-event '(?\s ?\n ?\r)))
+             (characterp last-command-event)
+             (eq (char-before) last-command-event)
+             (not (string-match-p "[[:alnum:].]" (string last-command-event))))
     (noteworthy-snippets--consider-word (1- (point)))))
 
 (defun noteworthy-snippets-maybe-space-word-at-dollar ()
