@@ -186,11 +186,13 @@ The LaTeX Suite equivalent of its snippet variables."
   :group 'noteworthy)
 
 (defcustom noteworthy-snippets-regex-rules
-  '(;; `int', `prod' and `pm' fire as soon as they are typed, so typing
-    ;; `integral', `product' or `inter' out in full met them halfway:
-    ;; `integralegral'.  A letter typed straight after one was the rest of
-    ;; a longer word, and takes the expansion back.
-    (:trigger "\\(integral\\|product\\|plus\\.minus\\)\\([[:alpha:]]\\)"
+  '(;; `int' and `pm' fire as soon as they are typed, which is the point
+    ;; of them -- but `inter', `interleave' and `pmat' begin with them.
+    ;; What is typed straight after the expansion shows it was the longer
+    ;; word, and takes the expansion back: `integraler' -> `inter'.
+    (:trigger "\\(integral\\)\\(er\\)"
+     :expand noteworthy-snippets-unexpand-word :in (math) :max-length 20)
+    (:trigger "\\(plus\\.minus\\)\\([[:alpha:]]\\)"
      :expand noteworthy-snippets-unexpand-word :in (math) :max-length 20)
     ;; x1 -> x_1, and alpha1 -> alpha_1, since the match is anchored at point
     (:trigger "\\(${LETTER}\\)\\(${DIGIT}\\)" :expand "\\1_\\2" :in (math))
@@ -242,15 +244,16 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; `dot;' and is dropped.
     (:trigger "\\(dot(${ACCENTED_BODY})\\);"
      :expand noteworthy-snippets-dot-semicolon :in (math) :max-length 80)
-    ;; `rdot' -> `dot(r)'.  The glued power `rd' fires on its second
-    ;; letter, before the `ot' can show it was r with a dot; `ot' or `dot'
-    ;; typed straight into the `^()' it left takes it back.
-    (:trigger "\\^(\\(d?\\)ot"
+    ;; `rdot' -> `dot(r)', `udot' -> `dot(u)'.  The glued power `rd' and
+    ;; subscript `ud' fire on their second letter, before the `ot' can show
+    ;; it was r or u with a dot; `ot' or `dot' typed straight into the
+    ;; `^()' or `_()' left takes it back.
+    (:trigger "\\([_^]\\)(\\(d?\\)ot"
      :expand noteworthy-snippets-rd-dot :in (math))
-    ;; The same for `sq': `sqrt' and `square' typed out leave `sqrt(rt)'
-    ;; and `sqrt(ua)', neither of them anything you would put in a root.
-    (:trigger "sqrt(\\(rt\\|ua\\)"
-     :expand noteworthy-snippets-sq-word :in (math))
+    ;; The same for `sq': `square' typed out leaves `sqrt(ua)', nothing
+    ;; you would put in a root.
+    (:trigger "sqrt(ua"
+     :expand noteworthy-snippets-square :in (math))
     ;; Postfix accents: xhat -> hat(x).  Typst has no postfix form, so the
     ;; accent has to be typed before its argument -- this puts it back the
     ;; way you think of it.  Longest alternative first, so ddot beats dot.
@@ -371,34 +374,36 @@ the arrow accent -- what LaTeX Suite spells `\\vec\\=' -- is `arrow()\\='.")
 
 (defun noteworthy-snippets-rd-dot (groups)
   "Turn the `^(ot\=' left by `rd\=' then `ot\=' into `dot(r)\='.
-GROUPS holds the `d\=' of `rddot\=', if any.  Only while the `^()\=' is
+Or the `_(ot\=' of `udot\=' into `dot(u)\='.  GROUPS holds the `^\=' or
+`_\=', then the `d\=' of `rddot\=', if any.  Only while the `^()\=' is
 the one the last expansion left, with nothing typed since but the rest
 of the accent; the empty field's `)\=' after point goes with it."
-  (let ((double (equal (nth 0 groups) "d")))
+  (let ((double (equal (nth 1 groups) "d"))
+        (letter (if (equal (nth 0 groups) "^") "r" "u")))
     (when (and (noteworthy-snippets--just-expanded-p (if double 3 2))
                (eq (char-after) ?\)))
       ;; Exiting moves point to the snippet's exit, past the `)'.
       (save-excursion (yas-exit-all-snippets))
-      (list (format "%s(r)$0" (if double "dot.double" "dot"))
+      (list (format "%s(%s)$0" (if double "dot.double" "dot") letter)
             (1+ (point))))))
 
-(defun noteworthy-snippets-sq-word (groups)
-  "Turn `sqrt(rt\=' or `sqrt(ua\=' back into the `sqrt\=' or `squa\=' typed.
-GROUPS holds the letters typed into the root's empty field, and only
-while nothing else has been."
+(defun noteworthy-snippets-square (_groups)
+  "Turn `sqrt(ua\=' back into the `squa\=' typed.
+Only while the root is the one the last expansion left, with nothing
+typed into it since."
   (when (and (noteworthy-snippets--just-expanded-p 2)
              (eq (char-after) ?\)))
     (save-excursion (yas-exit-all-snippets))
-    (list (concat "sq" (nth 0 groups) "$0") (1+ (point)))))
+    (list "squa$0" (1+ (point)))))
 
 (defconst noteworthy-snippets--word-keys
-  '(("integral" . "int") ("product" . "prod") ("plus.minus" . "pm"))
+  '(("integral" . "int") ("plus.minus" . "pm"))
   "Expansions of keyed snippets that begin longer words, and their keys.")
 
 (defun noteworthy-snippets-unexpand-word (groups)
-  "Put back the key whose expansion GROUPS has a letter glued to.
-Only straight after the expansion: `integrale\=' typed then is `inte\='."
-  (and (noteworthy-snippets--just-expanded-p 1)
+  "Put back the key whose expansion GROUPS has letters glued to.
+Only straight after the expansion: `integraler\=' typed then is `inter\='."
+  (and (noteworthy-snippets--just-expanded-p (length (nth 1 groups)))
        (concat (cdr (assoc (nth 0 groups) noteworthy-snippets--word-keys))
                (nth 1 groups))))
 
