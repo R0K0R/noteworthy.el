@@ -676,7 +676,11 @@ not the one point is in."
     (insert char char)
     (backward-char 1))
    (t
-    (insert char))))
+    ;; As a self-insert, so `post-self-insert-hook' sees it: the snippets
+    ;; fire on `**' and a math word ending in `_' is split, as after any
+    ;; other character.
+    (let ((last-command-event char))
+      (self-insert-command 1)))))
 
 (defun noteworthy-typst--in-open-string-p ()
   "Non-nil when a string was opened earlier on this line and not yet closed.

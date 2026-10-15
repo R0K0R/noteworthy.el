@@ -203,10 +203,11 @@ The LaTeX Suite equivalent of its snippet variables."
     (:trigger "\\(^\\|[^[:alnum:]_-]\\)\\(p?d\\)@\\([A-Za-z]\\)"
      :expand noteworthy-snippets-greek-differential :in (math))
     (:trigger "@\\([A-Za-z]\\)" :expand noteworthy-snippets-greek :in (math))
-    ;; `alpha 1\=' -> `alpha_1\='.  The rule above only sees a single letter
-    ;; against the digit, which caught `alpha1\=' back when `@a\=' expanded
-    ;; without a trailing space.  Now that it ends with one, subscripting a
-    ;; spelled-out greek letter has to step over that space.
+    ;; `**' -> ` dot ', the product, which typed glued would be the accent.
+    (:trigger "\\*\\*" :expand noteworthy-snippets-product-dot :in (math))
+    ;; `alpha 1\=' -> `alpha_1\='.  `@a1' needs no rule of its own: the rule
+    ;; above sees the `a1' it ends in.  Typed with a space, subscripting a
+    ;; spelled-out greek letter has to step over it.
     (:trigger "\\(${GREEK}\\) \\(${DIGIT}\\)" :expand "\\1_\\2" :in (math))
     ;; `ddot' -> `dot.double()' over what it follows, with or without a
     ;; space: `xddot', `x ddot', `@qddot', `pvec ddot', `xhat ddot'.  Unlike
@@ -216,13 +217,12 @@ The LaTeX Suite equivalent of its snippet variables."
      :expand noteworthy-snippets-nested-accent :in (math) :max-length 80)
     (:trigger "\\(^\\|[^[:alnum:]_.#@]\\)\\([[:alpha:]]+\\) ?ddot"
      :expand "\\1dot.double(\\2)$0" :in (math) :max-length 40)
-    ;; `@qarr' -> `arrow(theta)'.  The postfix accents below need a letter
-    ;; glued to the accent, and `@q' leaves `theta ' with its space, so a
-    ;; greek letter gets a rule of its own.  Only straight after the `@'
-    ;; expansion, so a `theta' typed out and followed by `hat' later is left
-    ;; alone.  `dot' is left out: `alpha dot beta' is the multiplication dot,
-    ;; the far likelier thing to type there, and `ddot' has a rule above.
-    (:trigger "\\(^\\|[^[:alpha:]]\\)\\([[:alpha:]]+\\) \\(hat\\|bar\\|til\\|vec\\|arr\\|und\\|ovl\\)"
+    ;; `@qarr' -> `arrow(theta)', `@qdot' -> `dot(theta)'.  The postfix
+    ;; accents below take a single letter, so a greek letter gets a rule of
+    ;; its own.  Only straight after the `@' expansion, so a `theta' typed
+    ;; out and followed by `hat' later is left alone.  Glued, `dot' is the
+    ;; accent as everywhere else; the product is `**'.
+    (:trigger "\\(^\\|[^[:alpha:]]\\)\\([[:alpha:]]+\\)\\(dot\\|hat\\|bar\\|til\\|vec\\|arr\\|und\\|ovl\\)"
      :expand noteworthy-snippets-greek-accent :in (math))
     ;; A digit or letter run raised or lowered as a group: x_12 -> x_(12)
     (:trigger "\\(${LETTER}\\)_\\(${DIGIT}${DIGIT}+\\)" :expand "\\1_(\\2)" :in (math))
@@ -343,11 +343,22 @@ Each rule is a plist:
 (defun noteworthy-snippets-greek (groups)
   "Expand the letter captured in GROUPS to a Typst greek letter name.
 
-Trailing space included: Typst spells these out, so `alpha\=' run against
-whatever you type next is a different identifier -- `@ab\=' would have to
-become `alphab\='.  The space is the separator you would type anyway."
+No trailing space, so `@a_1\=', `@a^2\=' and `@a)\=' come out tight.  A
+letter typed glued after it, `@ab\=', makes `alphab\=', which the word
+splitting takes apart when the word ends.  Glued to a letter before it,
+`x@a\=', the name gets a space in front: `xalpha\=' would be one word."
   (when-let* ((name (cdr (assoc (car groups) noteworthy-snippets--greek))))
-    (concat name " ")))
+    (let ((before (char-before (- (point) 2))))
+      (if (and before (string-match-p "[[:alpha:]]" (string before)))
+          (concat " " name)
+        name))))
+
+(defun noteworthy-snippets-product-dot (_groups)
+  "` dot \=' for the `**\=' just typed, without doubling a space before it."
+  (let ((before (char-before (- (point) 2))))
+    (if (or (null before) (memq before '(?\s ?\t ?\n)))
+        "dot "
+      " dot ")))
 
 (defun noteworthy-snippets-bracketed-differential (groups)
   "Expand GROUPS -- boundary, `d\=' or `pd\=', letter -- to `(dif x)\='.
@@ -363,7 +374,7 @@ it is `e^(dif x)\='."
 
 (defun noteworthy-snippets-greek-differential (groups)
   "Expand GROUPS -- boundary, `d' or `pd', letter -- to a greek differential."
-  (when-let* ((greek (noteworthy-snippets-greek (list (nth 2 groups)))))
+  (when-let* ((greek (cdr (assoc (nth 2 groups) noteworthy-snippets--greek))))
     (concat (nth 0 groups)
             (if (equal (nth 1 groups) "pd") "partial " "dif ")
             greek)))
@@ -1012,16 +1023,17 @@ else after it, so the names are the ones in scope here."
 
 (defun noteworthy-snippets-maybe-space-word ()
   "Split the math word just finished, if it runs names together.
-The word is finished by anything that is no letter, digit or `.\=' -- a
-space, but just as well the `^\=' of `costheta^2\=' or the `+\=' of `ab+c\=',
-so a word never waits for a space.  Not by a character a snippet has
-already taken: `dx;\=' is no word and a `;\='.  Runs from
+The word is finished by anything that is no letter, digit, `.\=' or `@\='
+-- a space, but just as well the `^\=' of `costheta^2\=' or the `+\=' of
+`ab+c\=', so a word never waits for a space.  Not by `@\=', which begins a
+greek letter that may belong to the word, as in `pd@q\='; nor by a
+character a snippet has already taken: `dx;\=' is no word and a `;\='.  Runs from
 `post-self-insert-hook'; see `noteworthy-snippets--consider-word'."
   (when (and noteworthy-snippets-auto-space
              (bound-and-true-p noteworthy-typst-mode)
              (characterp last-command-event)
              (eq (char-before) last-command-event)
-             (not (string-match-p "[[:alnum:].]" (string last-command-event))))
+             (not (string-match-p "[[:alnum:].@]" (string last-command-event))))
     (noteworthy-snippets--consider-word (1- (point)))))
 
 (defun noteworthy-snippets-maybe-space-word-at-dollar ()
