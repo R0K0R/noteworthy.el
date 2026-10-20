@@ -203,7 +203,7 @@ The LaTeX Suite equivalent of its snippet variables."
     (:trigger "\\(^\\|[^[:alnum:]_-]\\)\\(p?d\\)@\\([A-Za-z]\\)"
      :expand noteworthy-snippets-greek-differential :in (math))
     (:trigger "@\\([A-Za-z]\\)" :expand noteworthy-snippets-greek :in (math))
-    ;; `**' -> ` dot ', the product, which typed glued would be the accent.
+    ;; `**' -> `dot', the product, which typed glued would be the accent.
     (:trigger "\\*\\*" :expand noteworthy-snippets-product-dot :in (math))
     ;; `alpha 1\=' -> `alpha_1\='.  `@a1' needs no rule of its own: the rule
     ;; above sees the `a1' it ends in.  Typed with a space, subscripting a
@@ -261,17 +261,6 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; Only as a word of its own, not the end of `focal' or `local'.
     (:trigger "\\(^\\|[^[:alpha:]_.]\\)\\(bb\\|cal\\|frak\\|bold\\|upright\\|sans\\|mono\\)\\(${LETTER}\\)"
      :expand "\\1\\2(\\3)$0" :in (math))
-    ;; `xsq\=' -> `x sqrt()\='.  The keyed `sq\=' has to start a word, so glued to
-    ;; a variable it never fired at all -- and letting it fire glued without
-    ;; the space would give `xsqrt(2)\=', one identifier Typst does not have
-    ;; rather than x beside a root.  Putting the character back with a space
-    ;; after it is the whole rule.
-    ;;
-    ;; Only a letter or a digit needs it.  After `)\=', `]\=' or an operator the
-    ;; key already starts a word, so the keyed snippet matches first and
-    ;; `(a+b)sqrt(2)\=' is what was wanted anyway.
-    (:trigger "\\(${LETTER}\\|${DIGIT}\\)sq"
-     :expand "\\1 sqrt($1)$0" :in (math))
     ;; Differentials: `dx ' -> `dif x '.  The delimiter is part of the
     ;; trigger, and that is the whole trick.  Firing on the letter instead
     ;; would expand the moment you typed the second character of `det',
@@ -343,22 +332,15 @@ Each rule is a plist:
 (defun noteworthy-snippets-greek (groups)
   "Expand the letter captured in GROUPS to a Typst greek letter name.
 
-No trailing space, so `@a_1\=', `@a^2\=' and `@a)\=' come out tight.  A
-letter typed glued after it, `@ab\=', makes `alphab\=', which the word
-splitting takes apart when the word ends.  Glued to a letter before it,
-`x@a\=', the name gets a space in front: `xalpha\=' would be one word."
-  (when-let* ((name (cdr (assoc (car groups) noteworthy-snippets--greek))))
-    (let ((before (char-before (- (point) 2))))
-      (if (and before (string-match-p "[[:alpha:]]" (string before)))
-          (concat " " name)
-        name))))
+No space either side, so `@a_1\=', `@a^2\=' and `@a)\=' come out tight.
+Glued to a letter, `x@a\=' or `@ab\=', the word splitting puts the space
+in, as after any expansion."
+  (cdr (assoc (car groups) noteworthy-snippets--greek)))
 
 (defun noteworthy-snippets-product-dot (_groups)
-  "` dot \=' for the `**\=' just typed, without doubling a space before it."
-  (let ((before (char-before (- (point) 2))))
-    (if (or (null before) (memq before '(?\s ?\t ?\n)))
-        "dot "
-      " dot ")))
+  "`dot\=' for the `**\=' just typed.
+Glued to a letter either side, `a**b\=', the word splitting spaces it."
+  "dot")
 
 (defun noteworthy-snippets-bracketed-differential (groups)
   "Expand GROUPS -- boundary, `d\=' or `pd\=', letter -- to `(dif x)\='.
@@ -562,6 +544,23 @@ resolved here, since yasnippet never sees this text."
     (insert out)
     (when exit (goto-char (+ start exit)))))
 
+(defvar noteworthy-snippets-auto-space)
+
+(defun noteworthy-snippets--split-at (pos)
+  "Split the word an expansion at POS has run into, as `x@a' -> `xalpha'.
+An expansion is no keystroke, so the splitting would only see the word
+when the next delimiter is typed -- and `xsqrt(|)' has none coming
+before the root is filled in.  The word is the letters on both sides of
+POS, glued: none before it, and the expansion began a word of its own."
+  (when (and noteworthy-snippets-auto-space
+             (> pos (point-min))
+             (string-match-p "[[:alpha:]]" (string (char-before pos))))
+    (save-excursion
+      (goto-char pos)
+      (skip-chars-forward "[:alpha:]")
+      (when (> (point) pos)
+        (noteworthy-snippets--consider-word (point))))))
+
 (defun noteworthy-snippets-maybe-auto-expand ()
   "Expand an auto snippet whose key was just completed at point.
 Runs from `post-self-insert-hook\='."
@@ -587,6 +586,7 @@ Runs from `post-self-insert-hook\='."
                  (if (noteworthy-snippets--fieldless-p content)
                      (noteworthy-snippets--expand-plain content (nth 1 hit) (nth 2 hit))
                    (yas-expand-snippet template (nth 1 hit) (nth 2 hit)))))
+              (noteworthy-snippets--split-at (nth 1 hit))
               (if (markerp noteworthy-snippets--last-end)
                   (set-marker noteworthy-snippets--last-end (point))
                 (setq noteworthy-snippets--last-end (point-marker))))))
@@ -866,14 +866,23 @@ it only does so when it adds a boundary, and FN's is already there."
 (defun noteworthy-snippets--replace-word (start end pieces)
   "Replace START..END with PIECES, a space between each.
 An undo step of its own: see `noteworthy-snippets--as-undo-step'."
-  (let ((word (buffer-substring-no-properties start end)))
+  (let ((word (buffer-substring-no-properties start end))
+        (end (copy-marker end t)))
     (save-excursion
+      ;; Only the spaces are inserted, right to left, so the text around
+      ;; them is never touched: the word may run into a snippet still being
+      ;; filled in, `x' against `sqrt(|)', whose fields would not survive
+      ;; their text being deleted and put back.
       (noteworthy-snippets--as-undo-step
        (lambda ()
-         (goto-char start)
-         (delete-region start end)
-         (insert (mapconcat #'identity pieces " "))))
-      (push (list (copy-marker start) (point-marker) word
+         (let ((pos start) cuts)
+           (dolist (piece (butlast pieces))
+             (setq pos (+ pos (length piece)))
+             (push pos cuts))
+           (dolist (cut cuts)
+             (goto-char cut)
+             (insert " ")))))
+      (push (list (copy-marker start) end word
                   (buffer-chars-modified-tick))
             noteworthy-snippets--splits)
       (when-let* ((old (nthcdr noteworthy-snippets--splits-max
