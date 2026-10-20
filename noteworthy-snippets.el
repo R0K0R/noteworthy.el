@@ -686,10 +686,11 @@ A word that is one of these is never split, however it decomposes: `wide\='
 is the wide space, not `w id e\='.  Regenerate with
   typst eval \"dictionary(math).keys().sorted()\"")
 
-(defconst noteworthy-snippets--never-pieces '("at" "co" "wj")
+(defconst noteworthy-snippets--never-pieces '("at" "co" "wj" "pee")
   "Names in scope that a word is never split into.
-Typst's `@\=', `c/o\=' and word joiner: two letters that turn up inside
-ordinary words far more often than they are meant.")
+Typst's `@\=', `c/o\=', word joiner and sound-recording copyright:
+letters that turn up inside ordinary words far more often than they
+are meant.")
 
 (defvar noteworthy-snippets--scope-names)
 
@@ -737,14 +738,13 @@ differential: `dtheta' is for `d@q'."
         (and (> (length pieces) 1)
              (if named
                  ;; `cos t h t a' is `costheta' misspelt, not a cosine of
-                 ;; four variables.  Two letters after a name is as far as
-                 ;; a real product goes: `sinxy'.
-                 (not (noteworthy-snippets--letter-run-p pieces 3))
-               ;; Letters alone only for a short word Typst does not know,
-               ;; `xy' or `abc' -- a longer one is a typo (`lamda') or a
-               ;; word (`rain'), and splitting it would hide the error.
+                 ;; four variables.  Three letters after a name is as far
+                 ;; as a real product goes: `cosxyz'.
+                 (not (noteworthy-snippets--letter-run-p pieces 4))
+               ;; Letters alone only for a word Typst does not know, `xy'
+               ;; or `xyzw' -- and not one a letter off a name, which is a
+               ;; typo (`sni', `lamda') that splitting would hide.
                (and unknown
-                    (<= n 3)
                     (not (noteworthy-snippets--near-name-p word))))
              (not (equal (car pieces) "d"))
              pieces)))))
@@ -757,16 +757,35 @@ differential: `dtheta' is for `d@q'."
       (when (>= run n) (setq found t)))
     found))
 
+(defun noteworthy-snippets--one-deletion-p (long short)
+  "Non-nil when deleting one character from LONG gives SHORT."
+  (and (= (length long) (1+ (length short)))
+       (cl-loop for i to (length short)
+                thereis (and (string= (substring long 0 i) (substring short 0 i))
+                             (string= (substring long (1+ i)) (substring short i))))))
+
 (defun noteworthy-snippets--near-name-p (word)
-  "Non-nil when WORD is one edit from a Typst name as long as it.
-`sni' and `tna' are `sin' and `tan' mistyped, not three variables.  Only
-names of WORD's own length, so `xy' is never taken for `xi'."
+  "Non-nil when WORD is one edit from a Typst name.
+`sni' and `tna' are `sin' and `tan' mistyped, not three variables.  A
+letter left out or added only from four letters on, `lamda', so `xy' is
+never taken for `xi' nor `pir' for `pi'."
+  (or (and (>= (length word) 4)
+           (seq-some (lambda (name)
+                       (or (noteworthy-snippets--one-deletion-p name word)
+                           (noteworthy-snippets--one-deletion-p word name)))
+                     noteworthy-snippets--typst-math-scope))
+      (noteworthy-snippets--substitution-p word)))
+
+(defun noteworthy-snippets--substitution-p (word)
+  "Non-nil when WORD is a Typst name as long as it with two neighbours swapped.
+Or with one letter wrong, from four letters on: three letters one off a
+name are as often variables, `abc\=' beside `abs\='."
   (and (>= (length word) 3)
        (seq-some (lambda (name)
                    (and (= (length name) (length word))
                         (let ((diff (cl-loop for a across word for b across name
                                              count (/= a b))))
-                          (or (= diff 1)
+                          (or (and (= diff 1) (>= (length word) 4))
                               ;; two neighbours swapped
                               (and (= diff 2)
                                    (cl-loop for i below (1- (length word))
@@ -798,7 +817,8 @@ last asked for.")
 (defun noteworthy-snippets--math-word-before (end)
   "Bounds (START . END) of the math word ending at END, or nil.
 A run of two or more letters, not after `.' (a field, as in `arrow.r'),
-`#', `_', `\\' or `@', nor glued to a letter or digit before it."
+`#', `_', `\\' or `@', nor glued to a letter before it.  After a digit it
+is a coefficient's variables: `2xy' is `2x y'."
   (save-excursion
     (goto-char end)
     (skip-chars-backward "[:alpha:]")
@@ -806,7 +826,7 @@ A run of two or more letters, not after `.' (a field, as in `arrow.r'),
       (and (>= (- end start) 2)
            (not (memq (char-before start) '(?. ?# ?_ ?\\ ?@)))
            (not (and (char-before start)
-                     (string-match-p "[[:alnum:]]" (string (char-before start)))))
+                     (string-match-p "[[:alpha:]]" (string (char-before start)))))
            (progn (goto-char end) (eq (noteworthy-typst-context) 'math))
            (cons start end)))))
 

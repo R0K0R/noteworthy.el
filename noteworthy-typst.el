@@ -613,16 +613,26 @@ other kind, or when it is unbalanced."
 Matching on kind is deliberate: `]\=' inside `#f(a|b)\=' inserts a bracket
 rather than jumping out of the call, because the group it would close is
 not the one point is in."
-  (if-let* ((end (and noteworthy-typst-close-delimiter-tabout
-                     (noteworthy-typst--enclosing-end open))))
-      (goto-char end)
-    (insert (char-to-string close))
-    ;; Give the expander its chance, as a keypress would.  Called directly
-    ;; rather than by switching to `self-insert-command\=': smartparens watches
-    ;; that hook too, and what it does with a closing delimiter is exactly
-    ;; what the tabout above exists to take over.
-    (when (fboundp 'noteworthy-snippets-maybe-auto-expand)
-      (noteworthy-snippets-maybe-auto-expand))))
+  (let ((from (point))
+        (end (and noteworthy-typst-close-delimiter-tabout
+                  (noteworthy-typst--enclosing-end open))))
+    (if end
+        (goto-char end)
+      (insert (char-to-string close)))
+    ;; Give the snippets and the word splitting their chance, as a keypress
+    ;; would -- also when the closer was only stepped over, since the text
+    ;; before point is then just what typing it would have left: `(dx|)\='
+    ;; and `(xy|)\='.  Not after a jump over more than the closer, which
+    ;; typed nothing.  Called directly rather than by switching to
+    ;; `self-insert-command\=': smartparens watches that hook too, and what
+    ;; it does with a closing delimiter is exactly what the tabout above
+    ;; exists to take over.
+    (when (or (not end) (= end (1+ from)))
+      (let ((last-command-event close))
+        (when (fboundp 'noteworthy-snippets-maybe-auto-expand)
+          (noteworthy-snippets-maybe-auto-expand))
+        (when (fboundp 'noteworthy-snippets-maybe-space-word)
+          (noteworthy-snippets-maybe-space-word))))))
 
 (defun noteworthy-typst-close-paren ()
   "Jump past the enclosing `()\=' group, or insert `)\='."
