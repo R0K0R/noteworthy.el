@@ -5,6 +5,18 @@
 (require 'noteworthy-preview)
 (require 'vterm)
 
+(defvar treemacs--find-user-project-functions)
+
+(defun noteworthy--treemacs-show-root (dir)
+  "Make DIR the one project Treemacs shows.
+DIR itself, not the project it lies in: treemacs would ask project.el or
+projectile, which walk up to the nearest repository -- a notes repository
+holding several Noteworthy projects, like ~/KSA, rather than the one in
+~/KSA/General_Physics_I/noteworthy."
+  (let ((default-directory dir)
+        (treemacs--find-user-project-functions (list (lambda () dir))))
+    (treemacs-add-and-display-current-project-exclusively)))
+
 (defun noteworthy--enforce-treemacs-root ()
   "Force Treemacs to display `noteworthy-project-root` exclusively.
 Call this after any operation that might cause Treemacs to switch roots.
@@ -14,10 +26,9 @@ Includes safety guards to prevent errors if Treemacs isn't ready."
     (let ((treemacs-win (treemacs-get-local-window)))
       (when treemacs-win
         (with-selected-window treemacs-win
-          (let ((default-directory noteworthy-project-root))
-            (condition-case err
-                (treemacs-add-and-display-current-project-exclusively)
-              (error (message "Noteworthy: Could not re-enforce Treemacs root: %s" err)))))))))
+          (condition-case err
+              (noteworthy--treemacs-show-root noteworthy-project-root)
+            (error (message "Noteworthy: Could not re-enforce Treemacs root: %s" err))))))))
 
 ;; Helper to setup PDF window
 (defvar noteworthy-pdf-buffer)
@@ -106,8 +117,7 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
 
       ;; 1. Setup Treemacs (Left)
       (treemacs)
-      (let ((default-directory dir))
-        (treemacs-add-and-display-current-project-exclusively))
+      (noteworthy--treemacs-show-root dir)
       
       ;; 2. Setup Terminal (Bottom of Editor)
       (select-window editor-window)
