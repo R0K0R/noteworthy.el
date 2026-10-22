@@ -395,6 +395,10 @@ of the accent; the empty field's `)\=' after point goes with it."
       (list (format "%s(%s)$0" (if double "dot.double" "dot") letter)
             (1+ (point))))))
 
+(defvar noteworthy-snippets--taken-back nil
+  "Set by an expansion that gives back the word being typed, as `squa'.
+That word is not finished, so the splitting after the expansion leaves it.")
+
 (defun noteworthy-snippets-square (_groups)
   "Turn `sqrt(ua\=' back into the `squa\=' typed.
 Only while the root is the one the last expansion left, with nothing
@@ -402,6 +406,7 @@ typed into it since."
   (when (and (noteworthy-snippets--just-expanded-p 2)
              (eq (char-after) ?\)))
     (save-excursion (yas-exit-all-snippets))
+    (setq noteworthy-snippets--taken-back t)
     (list "squa$0" (1+ (point)))))
 
 (defconst noteworthy-snippets--word-keys
@@ -412,6 +417,7 @@ typed into it since."
   "Put back the key whose expansion GROUPS has letters glued to.
 Only straight after the expansion: `integraler\=' typed then is `inter\='."
   (and (noteworthy-snippets--just-expanded-p (length (nth 1 groups)))
+       (setq noteworthy-snippets--taken-back t)
        (concat (cdr (assoc (nth 0 groups) noteworthy-snippets--word-keys))
                (nth 1 groups))))
 
@@ -546,20 +552,46 @@ resolved here, since yasnippet never sees this text."
 
 (defvar noteworthy-snippets-auto-space)
 
-(defun noteworthy-snippets--split-at (pos)
-  "Split the word an expansion at POS has run into, as `x@a' -> `xalpha'.
-An expansion is no keystroke, so the splitting would only see the word
-when the next delimiter is typed -- and `xsqrt(|)' has none coming
-before the root is filled in.  The word is the letters on both sides of
-POS, glued: none before it, and the expansion began a word of its own."
-  (when (and noteworthy-snippets-auto-space
-             (> pos (point-min))
-             (string-match-p "[[:alpha:]]" (string (char-before pos))))
+(defun noteworthy-snippets--split-lines (beg end &optional keep)
+  "Split every run-together math word on the lines from BEG to END.
+After a snippet expansion: an expansion is no keystroke, so the splitting
+would only see a word when the next delimiter is typed -- and `xsqrt(|)'
+has none coming before the root is filled in.  The whole line, not just
+the word the expansion ran into, so words finished some other way, or
+never, are caught too.  One undo step for all of them.  With KEEP, not
+the word ending at point, which is still being typed."
+  (when noteworthy-snippets-auto-space
+    (let ((typing (point)))
     (save-excursion
-      (goto-char pos)
-      (skip-chars-forward "[:alpha:]")
-      (when (> (point) pos)
-        (noteworthy-snippets--consider-word (point))))))
+      (let ((lo (progn (goto-char beg) (line-beginning-position))))
+        (goto-char end)
+        (end-of-line)
+        (noteworthy-snippets--as-undo-step
+         (lambda ()
+           ;; Right to left, so a split never moves the words still to come.
+           (while (> (progn (skip-chars-backward "^[:alpha:]" lo) (point)) lo)
+             (let ((word-end (point))
+                   (word-start (progn (skip-chars-backward "[:alpha:]" lo) (point))))
+               (unless (and keep (= word-end typing))
+                 (noteworthy-snippets--consider-word word-end))
+               (goto-char word-start))))))))))
+
+(defvar noteworthy-snippets--auto-expanding nil
+  "Non-nil while `noteworthy-snippets-maybe-auto-expand' expands, which
+splits the line itself once the expansion is its own undo step.")
+
+(defun noteworthy-snippets--split-after-yas (&rest _)
+  "Split the line a snippet expanded on by hand (TAB) just went into.
+Advice after `yas-expand-snippet'."
+  (when (and (bound-and-true-p noteworthy-typst-mode)
+             (not noteworthy-snippets--auto-expanding))
+    (condition-case err
+        (noteworthy-snippets--split-lines (point) (point))
+      (error (message "Noteworthy: splitting after a snippet failed: %s"
+                      (error-message-string err))))))
+
+(with-eval-after-load 'yasnippet
+  (advice-add 'yas-expand-snippet :after #'noteworthy-snippets--split-after-yas))
 
 (defun noteworthy-snippets-maybe-auto-expand ()
   "Expand an auto snippet whose key was just completed at point.
@@ -573,20 +605,23 @@ Runs from `post-self-insert-hook\='."
     (condition-case err
         ;; A literal key is the more specific statement, so it wins over a
         ;; pattern that would also have matched here.
-        (let ((hit (or (noteworthy-snippets--auto-hit)
-                       (noteworthy-snippets--regex-hit))))
+        (let* ((noteworthy-snippets--taken-back nil)
+               (hit (or (noteworthy-snippets--auto-hit)
+                        (noteworthy-snippets--regex-hit))))
           (when hit
             ;; A keyed hit carries a `yas--template'; a regex rule a string.
             (let* ((template (nth 0 hit))
                    (content (if (yas--template-p template)
                                 (yas--template-content template)
                               template)))
-              (noteworthy-snippets--as-undo-step
-               (lambda ()
-                 (if (noteworthy-snippets--fieldless-p content)
-                     (noteworthy-snippets--expand-plain content (nth 1 hit) (nth 2 hit))
-                   (yas-expand-snippet template (nth 1 hit) (nth 2 hit)))))
-              (noteworthy-snippets--split-at (nth 1 hit))
+              (let ((noteworthy-snippets--auto-expanding t))
+                (noteworthy-snippets--as-undo-step
+                 (lambda ()
+                   (if (noteworthy-snippets--fieldless-p content)
+                       (noteworthy-snippets--expand-plain content (nth 1 hit) (nth 2 hit))
+                     (yas-expand-snippet template (nth 1 hit) (nth 2 hit))))))
+              (noteworthy-snippets--split-lines (nth 1 hit) (point)
+                                               noteworthy-snippets--taken-back)
               (if (markerp noteworthy-snippets--last-end)
                   (set-marker noteworthy-snippets--last-end (point))
                 (setq noteworthy-snippets--last-end (point-marker))))))
@@ -843,6 +878,10 @@ TICK `buffer-chars-modified-tick' right after.")
 (declare-function evil-start-undo-step "evil-common" (&optional continue))
 (declare-function evil-end-undo-step "evil-common" (&optional continue))
 
+(defvar noteworthy-snippets--in-undo-step nil
+  "Non-nil inside `noteworthy-snippets--as-undo-step', whose step a nested
+call joins: a line's splits are one step, not one per word.")
+
 (defun noteworthy-snippets--as-undo-step (fn)
   "Call FN as an undo step of its own, between what came before and after.
 So `u' walks back through a split or a snippet expansion like any other
@@ -856,12 +895,15 @@ drops the boundary in front of it when the last command was one too --
 so the record of what caused the last boundary is reset to a command,
 which nothing amalgamates with.  Emacs does not update it itself here:
 it only does so when it adds a boundary, and FN's is already there."
-  (let ((in-evil-step (bound-and-true-p evil-undo-list-pointer)))
-    (if in-evil-step (evil-end-undo-step) (undo-boundary))
-    (funcall fn)
-    (undo-boundary)
-    (setq undo-auto--last-boundary-cause 'command)
-    (when in-evil-step (evil-start-undo-step))))
+  (if noteworthy-snippets--in-undo-step
+      (funcall fn)
+    (let ((in-evil-step (bound-and-true-p evil-undo-list-pointer))
+          (noteworthy-snippets--in-undo-step t))
+      (if in-evil-step (evil-end-undo-step) (undo-boundary))
+      (funcall fn)
+      (undo-boundary)
+      (setq undo-auto--last-boundary-cause 'command)
+      (when in-evil-step (evil-start-undo-step)))))
 
 (defun noteworthy-snippets--replace-word (start end pieces)
   "Replace START..END with PIECES, a space between each.
@@ -1074,6 +1116,48 @@ Runs from `post-command-hook': `noteworthy-typst-smart-dollar' inserts the
              (eq (char-before) ?$))
     (noteworthy-snippets--consider-word (1- (point)))))
 
+(defvar evil-state)
+
+(defvar-local noteworthy-snippets--typed-word nil
+  "(START END WORD) of the word the last command typed, if point ended one.")
+
+(defun noteworthy-snippets--insert-state-p ()
+  "Whether this buffer is typing: evil's insert state, or no evil at all."
+  (or (not (bound-and-true-p evil-local-mode)) (eq evil-state 'insert)))
+
+(defun noteworthy-snippets-maybe-space-left-word ()
+  "Split the word just typed if this command finished it by leaving it.
+Whatever ends the typing does: RET, ESC, TAB out of `$...$', an arrow
+key, a click.  A typed delimiter is `noteworthy-snippets-maybe-space-word's;
+moving back into the word, changing it, or undoing is no finishing.
+Runs from `post-command-hook', and notes the word a typed letter leaves
+point after for the next command."
+  (let ((typed noteworthy-snippets--typed-word))
+    ;; No command at all, as at the end of a keyboard macro: nothing left.
+    (when this-command (setq noteworthy-snippets--typed-word nil))
+    (when (and this-command noteworthy-snippets-auto-space
+               (bound-and-true-p noteworthy-typst-mode))
+      (if (eq this-command 'self-insert-command)
+          (when (and (noteworthy-snippets--insert-state-p)
+                     (char-before)
+                     (string-match-p "[[:alpha:]]" (string (char-before))))
+            (let ((end (point)))
+              (save-excursion
+                (skip-chars-backward "[:alpha:]")
+                (setq noteworthy-snippets--typed-word
+                      (list (point) end (buffer-substring-no-properties (point) end))))))
+        (pcase-let ((`(,start ,end ,word) typed))
+          (when (and typed
+                     (not (and (symbolp this-command)
+                               (string-match-p "undo" (symbol-name this-command))))
+                     (<= end (point-max))
+                     (equal (buffer-substring-no-properties start end) word)
+                     (not (and (char-after end)
+                               (string-match-p "[[:alpha:]]" (string (char-after end)))))
+                     (or (not (noteworthy-snippets--insert-state-p))
+                         (< (point) start) (> (point) end)))
+            (noteworthy-snippets--consider-word end)))))))
+
 (defun noteworthy-snippets-setup ()
   "Turn on yasnippet for the current Noteworthy buffer."
   (when (and noteworthy-typst-mode (require 'yasnippet nil t))
@@ -1101,6 +1185,7 @@ Runs from `post-command-hook': `noteworthy-typst-smart-dollar' inserts the
               #'noteworthy-snippets-maybe-space-word 91 t)
     (add-hook 'post-command-hook
               #'noteworthy-snippets-maybe-space-word-at-dollar nil t)
+    (add-hook 'post-command-hook #'noteworthy-snippets-maybe-space-left-word nil t)
     (unless noteworthy-snippets--scope-timer
       (setq noteworthy-snippets--scope-timer
             (run-with-idle-timer 0.5 t #'noteworthy-snippets--refresh-scope-idle)))))
