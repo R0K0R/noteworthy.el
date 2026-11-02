@@ -52,6 +52,8 @@ each is first.  Works on a remote DIR too."
   (define-key map (kbd "M-k")        #'noteworthy-typst-move-line-up)
   (define-key map (kbd "C-c C-n")    #'noteworthy-typst-next-heading)
   (define-key map (kbd "C-c C-p")    #'noteworthy-typst-previous-heading)
+  (define-key map (kbd "M-t n")      #'noteworthy-new-page)
+  (define-key map (kbd "M-t r")      #'noteworthy-refresh-preview)
   (define-key map (kbd ")")          #'noteworthy-typst-close-paren)
   (define-key map (kbd "]")          #'noteworthy-typst-close-bracket)
   (define-key map (kbd "}")          #'noteworthy-typst-close-brace)

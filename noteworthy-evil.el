@@ -174,7 +174,10 @@
       (kbd "M-L") (lambda () (interactive) (noteworthy-pdf-scroll 'right))
       
       ;; Toggle Log (Alt+t l)
-      (kbd "M-t l") #'noteworthy-toggle-log)))
+      (kbd "M-t l") #'noteworthy-toggle-log
+      ;; A new page (hierarchy entry, file, preview), and the preview alone
+      (kbd "M-t n") #'noteworthy-new-page
+      (kbd "M-t r") #'noteworthy-refresh-preview)))
 
 (defvar noteworthy-pdf-buffer nil
   "The textbook PDF buffer the Noteworthy layout opened, or nil.

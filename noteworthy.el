@@ -33,6 +33,7 @@ If nil, defaults to 35% of the frame width."
 (require 'noteworthy-layout)
 (require 'noteworthy-snippets)
 (require 'noteworthy-image)
+(require 'noteworthy-pages)
 ;; Installs its fix on load; see its Commentary for the paint bug it cures.
 (require 'noteworthy-webkit)
 
