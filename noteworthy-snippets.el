@@ -192,6 +192,9 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; word, and takes the expansion back: `integraler' -> `inter'.
     (:trigger "\\(integral\\)\\(er\\)"
      :expand noteworthy-snippets-unexpand-word :in (math) :max-length 20)
+    ;; Likewise `del' (nabla) and `delta': `nablat' -> `delt'.
+    (:trigger "\\(nabla\\)\\(t\\)"
+     :expand noteworthy-snippets-unexpand-word :in (math) :max-length 20)
     ;; x1 -> x_1, and alpha1 -> alpha_1, since the match is anchored at point
     (:trigger "\\(${LETTER}\\)\\(${DIGIT}\\)" :expand "\\1_\\2" :in (math))
     ;; @a -> alpha.  Typst spells the greek letters out, so this is purely
@@ -410,7 +413,7 @@ typed into it since."
     (list "squa$0" (1+ (point)))))
 
 (defconst noteworthy-snippets--word-keys
-  '(("integral" . "int"))
+  '(("integral" . "int") ("nabla" . "del"))
   "Expansions of keyed snippets that begin longer words, and their keys.")
 
 (defun noteworthy-snippets-unexpand-word (groups)

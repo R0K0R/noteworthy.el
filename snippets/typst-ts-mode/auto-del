@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: nabla
+# key: del
+# group: math (auto)
+# condition: (noteworthy-typst-auto-word 'math)
+# --
+nabla$0
