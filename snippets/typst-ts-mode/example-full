@@ -4,6 +4,6 @@
 # group: blocks
 # condition: (noteworthy-typst-in 'markup)
 # --
-#example("${1:Title}", ${2:auto}, label: "${3:label}")[
+#example([${1:Title}], ${2:auto}, label: "${3:label}")[
   $0
 ]

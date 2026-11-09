@@ -4,6 +4,6 @@
 # group: blocks
 # condition: (noteworthy-typst-in 'markup)
 # --
-#equation("${1:Title}")[
+#equation([${1:Title}])[
   $0
 ]

@@ -4,6 +4,6 @@
 # group: blocks
 # condition: (noteworthy-typst-in 'markup)
 # --
-#theorem("${1:Title}")[
+#theorem([${1:Title}])[
   $0
 ]
