@@ -69,6 +69,23 @@ Includes safety guards to prevent errors if Treemacs isn't ready."
                                 (pdf-view-fit-width-to-window))))
                           pdf-window))))))
 
+(declare-function lsp-session "lsp-mode")
+(declare-function lsp-session-folders "lsp-mode")
+(declare-function lsp-f-canonical "lsp-mode")
+(declare-function lsp-workspace-folders-add "lsp-mode")
+
+(defun noteworthy--lsp-root (dir)
+  "Make DIR the language server's root for the files under it.
+lsp-mode guesses a root through projectile or project.el, which walk up
+to the nearest repository -- a notes repository holding several courses,
+like ~/KSA -- and asks.  A folder in its session is used instead, the
+deepest one holding the file.  Through lsp-mode's own command: a
+`cl-pushnew' on its accessor would be expanded here, before lsp-mode is
+loaded, into a setter that does not exist."
+  (when (require 'lsp-mode nil t)
+    (unless (member (lsp-f-canonical dir) (lsp-session-folders (lsp-session)))
+      (lsp-workspace-folders-add dir))))
+
 (defun noteworthy-init (&optional project-dir pdf-path-arg)
   "Initialize Noteworthy workspace with PROJECT-DIR and optional PDF-PATH-ARG.
 Sets up treemacs, editor, terminal, preview, and PDF windows."
@@ -92,6 +109,9 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
 
     ;; Load project-specific settings (if any), overriding defaults/globals
     (noteworthy-load-settings dir)
+
+    ;; Before any of its files is opened, or lsp asks for a root.
+    (noteworthy--lsp-root dir)
 
     ;; Find master file
     (let ((master-path
