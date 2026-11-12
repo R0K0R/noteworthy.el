@@ -370,12 +370,29 @@ then propagated to every line after it."
         (concat (noteworthy-typst-get-current-indent)
                 (noteworthy-typst-get-indent-unit))))))
 
+(defvar corfu--index)
+(defvar corfu--preselect)
+(declare-function corfu-quit "corfu")
+
+(defun noteworthy-typst--corfu-chosen-p ()
+  "Whether a completion candidate was chosen, not merely offered.
+Corfu's own test: the selection is not the one it preselected.  Inside a
+call the popup offers the parameters -- `fill:', `stroke:' -- the moment
+the parentheses open, and accepting whatever it showed made RET type one
+of them instead of breaking the line."
+  (and (bound-and-true-p corfu-mode)
+       (bound-and-true-p corfu--candidates)
+       (>= corfu--index 0)
+       (/= corfu--index corfu--preselect)))
+
 (defun noteworthy-typst-smart-newline ()
-  "Handle newlines with smart indent detection."
+  "Handle newlines with smart indent detection.
+A completion candidate chosen in the popup (C-n, TAB) is inserted
+instead; one it merely offers is not, and the popup closes."
   (interactive)
-  (if (and (bound-and-true-p corfu-mode)
-           (bound-and-true-p corfu--candidates))
+  (if (noteworthy-typst--corfu-chosen-p)
       (call-interactively 'corfu-insert)
+    (when (bound-and-true-p corfu--candidates) (corfu-quit))
     (cond
      ;; Case 1: Expand an empty pair, (|) or $|$
      ((or (and (memq (char-before) '(?\( ?\[ ?\{))

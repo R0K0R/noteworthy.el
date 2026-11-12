@@ -177,7 +177,10 @@
       (kbd "M-t l") #'noteworthy-toggle-log
       ;; A new page (hierarchy entry, file, preview), and the preview alone
       (kbd "M-t n") #'noteworthy-new-page
-      (kbd "M-t r") #'noteworthy-refresh-preview)))
+      (kbd "M-t r") #'noteworthy-refresh-preview
+      ;; The parameters of the call at point, on request: they no longer
+      ;; pop up on every `(' (see the Doom module).
+      (kbd "M-t s") #'lsp-signature-activate)))
 
 (defvar noteworthy-pdf-buffer nil
   "The textbook PDF buffer the Noteworthy layout opened, or nil.
