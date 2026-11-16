@@ -255,6 +255,14 @@ The LaTeX Suite equivalent of its snippet variables."
     ;; you would put in a root.
     (:trigger "sqrt(ua"
      :expand noteworthy-snippets-square :in (math))
+    ;; An accent covers the atom before it with its scripts, when a script is
+    ;; a number or a group: `v^2ovl' -> `overline(v^2)', `x_(ij)hat' ->
+    ;; `hat(x_(ij))', `theta^2dot' -> `dot(theta^2)'.  A one-letter script is
+    ;; left to the rule below, which accents that letter: `e^xhat' is
+    ;; `e^hat(x)'.  The whole letter run is taken and the expander picks the
+    ;; atom from its end (`noteworthy-snippets-scripted-accent').
+    (:trigger "\\(${ACCENTED}\\|[[:alpha:]]+\\)\\(\\(?:[_^]\\(?:[0-9]+\\|([^()]*)\\)\\)+\\)\\(ddot\\|dot\\|hat\\|bar\\|til\\|vec\\|arr\\|und\\|ovl\\)"
+     :expand noteworthy-snippets-scripted-accent :in (math) :max-length 80)
     ;; Postfix accents: xhat -> hat(x).  Typst has no postfix form, so the
     ;; accent has to be typed before its argument -- this puts it back the
     ;; way you think of it.  Longest alternative first, so ddot beats dot.
@@ -297,6 +305,17 @@ The LaTeX Suite equivalent of its snippet variables."
      :expand "\\1dif \\2 " :in (math))
     (:trigger "\\(^\\|[^[:alnum:]_-]\\)\\(d\\)\\(${LETTER}\\))"
      :expand noteworthy-snippets-bracketed-differential :in (math))
+    ;; Glued to what it multiplies: `kdx;' -> `k dif x ', `2dx;' -> `2 dif x ',
+    ;; `kdx)' -> `k (dif x)', and `pd' the same.  Only with `;' or `)': they
+    ;; say "this is the differential" as a space or a comma does not, which
+    ;; would take `ds ' from the end of any word.  The space keeps the
+    ;; factor apart.  Partials first, so `kpdx;' is k with a partial.
+    (:trigger "\\([[:alnum:]]\\)pd\\(${LETTER}\\);"
+     :expand "\\1 partial \\2 " :in (math))
+    (:trigger "\\([[:alnum:]]\\)d\\(${LETTER}\\);"
+     :expand "\\1 dif \\2 " :in (math))
+    (:trigger "\\([[:alnum:]]\\)\\(pd\\|d\\)\\(${LETTER}\\))"
+     :expand noteworthy-snippets-glued-differential :in (math))
     ;; `dx/' -> `(dif x)/', and `pdx/' -> `(partial x)/'.  A slash makes a
     ;; fraction of the operand in front of it, and `dif x/' would put only
     ;; the x on top.  The slash is kept.
@@ -449,6 +468,30 @@ with a dot."
                      (goto-char (- (point) 4))
                      (looking-back ") ?" (max (point-min) (- (point) 2))))))
          (format "%s(%s)$0" fn (nth 0 groups)))))
+
+(defun noteworthy-snippets-scripted-accent (groups)
+  "Wrap the atom and scripts in GROUPS with the accent suffixed to them.
+GROUPS is what precedes the scripts -- an accent call, or a run of
+letters -- the scripts, and the accent.  Of a run, the atom is a greek
+name it ends with, else its last letter: `theta^2' is theta's, `kv^2'
+v's.  The rest of the run is put back in front, for the splitting to
+separate: `k overline(v^2)'."
+  (when-let* ((fn (cdr (assoc (nth 2 groups) noteworthy-snippets--accents))))
+    (let* ((run (nth 0 groups))
+           (atom (cond ((string-search "(" run) run)
+                       ((seq-find (lambda (g) (string-suffix-p g run))
+                                  (sort (mapcar #'cdr noteworthy-snippets--greek)
+                                        (lambda (a b) (> (length a) (length b))))))
+                       (t (substring run -1)))))
+      (format "%s%s(%s%s)$0" (substring run 0 (- (length run) (length atom)))
+              fn atom (nth 1 groups)))))
+
+(defun noteworthy-snippets-glued-differential (groups)
+  "`noteworthy-snippets-bracketed-differential' after a letter or digit.
+GROUPS is that character, `d' or `pd', and the letter; a space keeps the
+character apart -- `k(dif x)' would be a call of k."
+  (noteworthy-snippets-bracketed-differential
+   (cons (concat (nth 0 groups) " ") (cdr groups))))
 
 (defun noteworthy-snippets-postfix-accent (groups)
   "`noteworthy-snippets-accent\=', for a letter that is a word of its own.
