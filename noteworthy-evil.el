@@ -225,6 +225,43 @@ in a terminal, and a search for one mode missed the other.")
             ('left  (image-backward-hscroll 20))
             ('right (image-forward-hscroll 20))))))))))
 
+;;; Wrapping a selection: `S c' cancels it
+
+;; LaTeX Suite's visual snippets wrap the selection in what one key names.
+;; In evil's visual state a bare letter is a command, so the key comes
+;; after evil-surround's `S' -- or `ys' and a motion from normal state:
+;; `ysiwc' cancels the word at point.
+
+(defcustom noteworthy-evil-surround-pairs
+  '((?c . ("cancel(" . ")"))
+    (?o . ("overline(" . ")"))
+    (?u . ("underline(" . ")"))
+    (?O . ("overbrace(" . ")"))
+    (?U . ("underbrace(" . ")"))
+    (?h . ("hat(" . ")"))
+    (?v . ("arrow(" . ")"))
+    (?d . ("dot(" . ")"))
+    (?~ . ("tilde(" . ")"))
+    (?r . ("sqrt(" . ")"))
+    (?a . ("abs(" . ")"))
+    (?n . ("norm(" . ")"))
+    (?$ . ("$" . "$"))
+    (?* . ("*" . "*"))
+    (?_ . ("_" . "_")))
+  "evil-surround pairs added in Noteworthy buffers, ahead of the defaults.
+`f' still asks for any function name."
+  :type '(alist :key-type character :value-type (cons string string))
+  :group 'noteworthy)
+
+(defun noteworthy-evil--surround-pairs-h ()
+  "Give this buffer `noteworthy-evil-surround-pairs'."
+  (when (require 'evil-surround nil t)
+    (setq-local evil-surround-pairs-alist
+                (append noteworthy-evil-surround-pairs
+                        (default-value 'evil-surround-pairs-alist)))))
+
+(add-hook 'noteworthy-typst-mode-hook #'noteworthy-evil--surround-pairs-h)
+
 (noteworthy-evil-setup)
 
 (provide 'noteworthy-evil)
