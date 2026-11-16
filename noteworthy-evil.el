@@ -244,12 +244,10 @@ in a terminal, and a search for one mode missed the other.")
     (?~ . ("tilde(" . ")"))
     (?r . ("sqrt(" . ")"))
     (?a . ("abs(" . ")"))
-    (?n . ("norm(" . ")"))
-    (?$ . ("$" . "$"))
-    (?* . ("*" . "*"))
-    (?_ . ("_" . "_")))
+    (?n . ("norm(" . ")")))
   "evil-surround pairs added in Noteworthy buffers, ahead of the defaults.
-`f' still asks for any function name."
+`f' still asks for any function name, and a character not listed wraps
+in itself: `S $', `S *', `S _'."
   :type '(alist :key-type character :value-type (cons string string))
   :group 'noteworthy)
 
