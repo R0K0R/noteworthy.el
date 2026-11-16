@@ -695,13 +695,20 @@ not the one point is in."
     ;; while the comma form did.
     (self-insert-command 1 ?\s)))
 
+(defun noteworthy-typst--in-label-p ()
+  "Whether point is in a reference or label name: `@fig_sp|', `<fig_sp|'.
+There `_' is part of the name, not emphasis to pair."
+  (save-excursion
+    (skip-chars-backward "[:alnum:]_.:-")
+    (memq (char-before) '(?@ ?<))))
+
 (defun noteworthy-typst-smart-pair (char)
   "Smart pairing for CHAR (* and _). Skip or pair based on context."
   (interactive)
   (cond
-   ((eq (char-after) char)
+   ((and (eq (char-after) char) (not (noteworthy-typst--in-label-p)))
     (forward-char 1))
-   ((noteworthy-typst-markup-context-p)
+   ((and (noteworthy-typst-markup-context-p) (not (noteworthy-typst--in-label-p)))
     (insert char char)
     (backward-char 1))
    (t
