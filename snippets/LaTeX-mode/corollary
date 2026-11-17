@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: corollary block
+# key: cor
+# group: blocks
+# condition: (noteworthy-snippets-in 'text)
+# --
+\begin{corollary}[${1:Title}]
+$0
+\end{corollary}

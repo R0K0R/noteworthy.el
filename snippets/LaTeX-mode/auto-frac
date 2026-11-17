@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: fraction
+# key: //
+# group: math (auto)
+# condition: (noteworthy-snippets-auto 'math)
+# --
+\frac{$1}{$2}$0

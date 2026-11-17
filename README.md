@@ -135,8 +135,9 @@ noteworthy/
 ├── noteworthy-layout.el   # Workspace management
 ├── noteworthy-preview.el  # Preview abstraction
 ├── noteworthy-evil.el     # Evil integration (optional)
-├── noteworthy-snippets.el # yasnippet integration
-├── snippets/              # Typst snippets, by context
+├── noteworthy-snippets.el # yasnippet integration (the auto-expansion engine)
+├── noteworthy-latex.el    # The same typing layer for AUCTeX LaTeX-mode
+├── snippets/              # Snippets, by major mode and context
 └── README.md
 ```
 
@@ -311,7 +312,25 @@ already spells the operators the way you would type them. What survives is
 the part that *wraps* an argument — Typst is prefix-and-parenthesised
 everywhere, and that is exactly what a postfix trigger fixes.
 
-## Contributing## Contributing
+## LaTeX
+
+The typing layer also runs in AUCTeX's `LaTeX-mode`, with `texmathp` as the
+context:
+
+```elisp
+(add-hook 'LaTeX-mode-hook #'noteworthy-latex-setup)
+```
+
+Same keys as Typst, emitting LaTeX (`@a` `\alpha`, `xhat` `\hat{x}`,
+`v^2ovl` `\overline{v^2}`, `bbR` `\mathbb{R}`, `x12` `x_{12}`, `dx ` and
+`kdx;` `\,\mathrm{d}x`, `sq` `\sqrt{}`, `//` `\frac{}{}`, `mat;` `bmat;`
+`pmat;` `cases;` `align;`, `mk` and `dm` in text, `def` `thm` `ex` `proof`
+on TAB).  Two things are LaTeX's own: a letter typed straight after an
+expansion that ended in a control word gets a space (`@ax` `\alpha x`), and a
+math word made of command names gets its backslashes when a delimiter ends
+it (`sin(` `\sin(`, `costheta ` `\cos\theta `).
+
+## Contributing
 
 Contributions are welcome! Please open an issue or pull request.
 

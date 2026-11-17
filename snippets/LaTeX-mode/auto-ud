@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: subscript (glued)
+# key: ud
+# group: math (auto)
+# condition: (noteworthy-snippets-auto 'math)
+# --
+_{$1}$0

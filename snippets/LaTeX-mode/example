@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: example block
+# key: ex
+# group: blocks
+# condition: (noteworthy-snippets-in 'text)
+# --
+\begin{example}[${1:Title}]
+$0
+\end{example}

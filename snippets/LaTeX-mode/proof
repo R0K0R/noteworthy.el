@@ -1,0 +1,9 @@
+# -*- mode: snippet -*-
+# name: proof block
+# key: proof
+# group: blocks
+# condition: (noteworthy-snippets-in 'text)
+# --
+\begin{proof}
+$0
+\end{proof}

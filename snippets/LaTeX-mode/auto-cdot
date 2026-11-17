@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: dot product
+# key: **
+# group: math (auto)
+# condition: (noteworthy-snippets-auto 'math)
+# --
+\\cdot

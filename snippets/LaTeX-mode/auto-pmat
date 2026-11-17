@@ -1,0 +1,10 @@
+# -*- mode: snippet -*-
+# name: parenthesised matrix
+# key: pmat;
+# group: math (auto)
+# condition: (noteworthy-snippets-auto 'math)
+# --
+\begin{pmatrix}
+${1:a} & ${2:b} \\\\
+${3:c} & ${4:d}
+\end{pmatrix}$0

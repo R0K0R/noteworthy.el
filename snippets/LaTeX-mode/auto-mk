@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: inline math
+# key: mk
+# group: prose (auto)
+# condition: (noteworthy-snippets-auto-word 'text)
+# --
+\\( $1 \\)$0

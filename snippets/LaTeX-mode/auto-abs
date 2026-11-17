@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: absolute value
+# key: abs;
+# group: math (auto)
+# condition: (noteworthy-snippets-auto 'math)
+# --
+\left| ${1:x} \right|$0

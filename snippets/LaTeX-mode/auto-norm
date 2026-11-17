@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: norm
+# key: norm;
+# group: math (auto)
+# condition: (noteworthy-snippets-auto 'math)
+# --
+\left\| ${1:x} \right\|$0

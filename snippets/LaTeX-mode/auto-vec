@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: column vector
+# key: vec;
+# group: math (auto)
+# condition: (noteworthy-snippets-auto 'math)
+# --
+\begin{pmatrix} ${1:a} \\\\ ${2:b} \end{pmatrix}$0

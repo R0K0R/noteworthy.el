@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: infinity
+# key: oo
+# group: math (auto)
+# condition: (noteworthy-snippets-auto-word 'math)
+# --
+\\infty

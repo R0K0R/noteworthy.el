@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: nth derivative
+# key: dvn;
+# group: math (auto)
+# condition: (noteworthy-snippets-auto 'math)
+# --
+\frac{\mathrm{d}^{${3:n}} ${1:y}}{\mathrm{d} ${2:x}^{$3}} $0

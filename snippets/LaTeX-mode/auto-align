@@ -1,0 +1,10 @@
+# -*- mode: snippet -*-
+# name: align
+# key: align;
+# group: math (auto)
+# condition: (noteworthy-snippets-auto 'text)
+# --
+\begin{align*}
+${1:a} &= ${2:b} \\\\
+&= $0
+\end{align*}
