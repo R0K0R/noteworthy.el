@@ -153,6 +153,21 @@ word has to start with a letter, so the `5\=' of `2.5sr\=' is no variant."
          (> (1- (point)) (point-min))
          (string-match-p "[[:alnum:]_]" (string (char-before (1- (point))))))))
 
+(defvar noteworthy-snippets--last-end)
+
+(defvar-local noteworthy-snippets-protect-expansion nil
+  "Non-nil to keep a key from straddling the end of the last expansion.
+`pm\=' is `\\pm\=' as soon as it is typed; the `at;\=' after it is not the
+tail of a key `pmat;\='.  Typst, where nothing this short is a prefix of a
+key, leaves it nil.")
+
+(defun noteworthy-snippets--straddles-p (start end)
+  "Non-nil when START..END has the end of the last expansion strictly inside."
+  (and noteworthy-snippets-protect-expansion
+       (markerp noteworthy-snippets--last-end)
+       (eq (marker-buffer noteworthy-snippets--last-end) (current-buffer))
+       (< start (marker-position noteworthy-snippets--last-end) end)))
+
 (defun noteworthy-snippets--lookup (key requirement)
   "Return the one live template for KEY under REQUIREMENT, or nil.
 
@@ -184,10 +199,11 @@ it starts a word."
                     (- (point) noteworthy-snippets-auto-key-max-length))))
     (cl-loop for start from floor below end
              for key = (buffer-substring-no-properties start end)
-             for hit = (or (and (not (noteworthy-snippets--in-variant-p start))
-                                (noteworthy-snippets--lookup key 'auto))
-                           (and (noteworthy-snippets--key-boundary-ok-p key start)
-                                (noteworthy-snippets--lookup key 'auto-word)))
+             for hit = (and (not (noteworthy-snippets--straddles-p start end))
+                            (or (and (not (noteworthy-snippets--in-variant-p start))
+                                     (noteworthy-snippets--lookup key 'auto))
+                                (and (noteworthy-snippets--key-boundary-ok-p key start)
+                                     (noteworthy-snippets--lookup key 'auto-word))))
              when hit return (list hit start end))))
 
 ;;; Regex triggers (the `r' option in Obsidian's LaTeX Suite)
