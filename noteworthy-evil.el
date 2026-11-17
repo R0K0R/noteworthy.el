@@ -3,6 +3,17 @@
 (require 'evil)
 (require 'noteworthy-typst)
 
+;; Defined by noteworthy-workspace; noteworthy.el has stubs that say so.
+(declare-function noteworthy-new-page "noteworthy-workspace" ())
+(declare-function noteworthy-refresh-preview "noteworthy-workspace" ())
+(declare-function noteworthy-quit "noteworthy-workspace" ())
+(declare-function noteworthy-toggle-log "noteworthy-workspace" ())
+(declare-function noteworthy-typst-send-position "noteworthy-workspace" ())
+(declare-function pdf-view-next-page-command "pdf-view" (&optional n))
+(declare-function pdf-view-previous-page-command "pdf-view" (&optional n))
+(declare-function image-forward-hscroll "image-mode" (&optional n))
+(declare-function image-backward-hscroll "image-mode" (&optional n))
+
 (defun noteworthy-typst-smart-o ()
   "Open line below with smart indentation."
   (interactive)

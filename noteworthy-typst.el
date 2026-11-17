@@ -19,6 +19,11 @@
 (declare-function yas-active-snippets "yasnippet" (&optional beg end))
 (declare-function yas--templates-for-key-at-point "yasnippet")
 
+;; Defined by noteworthy-workspace (stubs in noteworthy.el say so when it is missing).
+(declare-function noteworthy-new-page "noteworthy-workspace" ())
+(declare-function noteworthy-refresh-preview "noteworthy-workspace" ())
+(declare-function noteworthy-quit "noteworthy-workspace" ())
+
 (defvar noteworthy-typst-mode-map (make-sparse-keymap)
   "Keymap for noteworthy-typst-mode.")
 

@@ -2,13 +2,22 @@
 
 ;; Author: r0k0r
 ;; Version: 0.1.0
-;; Package-Requires: ((emacs "29.1") (typst-ts-mode "0.1") (typst-preview "0.1") (dtrt-indent) (treemacs "2.9") (pdf-tools "1.0") (evil) (vterm))
+;; Package-Requires: ((emacs "29.1") (typst-ts-mode "0.1") (dtrt-indent))
 ;; Keywords: typst, languages, tools
 ;; URL: https://github.com/R0K0R/noteworthy.el
 
 ;;; Commentary:
-;; Emacs editing environment for the Noteworthy academic framework for Typst.
+;; Emacs editing environment for the Noteworthy academic framework for Typst:
+;; the typing layer (smart pairs, newline, structure editing), snippets,
+;; the same layer for LaTeX, Evil bindings and clipboard image paste.
 ;; See: https://github.com/sihooleebd/noteworthy
+;;
+;; Opening a project -- the window layout with tree, terminal, preview and
+;; PDF, adding pages, quitting, and working on a Syncworthy server -- is
+;; `noteworthy-workspace', a separate package built on emacs-collab.  The
+;; names `noteworthy-init', `noteworthy-quit', `noteworthy-new-page' and
+;; the like are defined there; without it they only say so (see the end of
+;; this file).
 
 ;;; Code:
 
@@ -17,26 +26,22 @@
   :group 'languages
   :prefix "noteworthy-")
 
-(defcustom noteworthy-terminal-shell nil
-  "Shell executable to use for the Noteworthy terminal.
-If nil, defaults to bash or $SHELL."
-  :type '(choice (const :tag "Default" nil)
-                 (file :tag "Shell path")))
+(defvar noteworthy-project-root nil
+  "Root of the Noteworthy project being edited, or nil.
+Set by the workspace (`noteworthy-workspace') before it opens the first page;
+the Typst mode hook below roots typst-preview there.")
 
-(defcustom noteworthy-pdf-width nil
-  "Width of the PDF window in columns.
-If nil, defaults to 35% of the frame width."
-  :type '(choice (const :tag "Dynamic (35%)" nil) integer))
+(defvar noteworthy-master-file nil
+  "The file the project's preview compiles (templates/core/parser.typ), or nil.")
+
+(defvar noteworthy-pdf-buffer nil
+  "The reference PDF buffer of the open workspace, or nil.
+What `noteworthy-pdf-scroll' (M-H/J/K/L) scrolls.  Set by the workspace.")
 
 (require 'noteworthy-typst)
-(require 'noteworthy-preview)
-(require 'noteworthy-layout)
 (require 'noteworthy-snippets)
 (require 'noteworthy-latex)
 (require 'noteworthy-image)
-(require 'noteworthy-pages)
-;; Installs its fix on load; see its Commentary for the paint bug it cures.
-(require 'noteworthy-webkit)
 
 (with-eval-after-load 'evil
   (require 'noteworthy-evil))
@@ -107,6 +112,32 @@ files it depends on changes (`noteworthy--dynamic-inputs-stamp')."
               (setq-local typst-preview--master-file noteworthy-master-file))))
 
 (add-hook 'typst-ts-mode-hook #'noteworthy-typst-mode)
+
+;;; The workspace is another package
+
+;; Commands that moved to `noteworthy-workspace'.  When it is installed it
+;; is loaded on first use and defines them for real; until then each says
+;; what is missing.  `fboundp' keeps these from replacing the real ones if
+;; the workspace was loaded first.
+(defun noteworthy--workspace-call (command args)
+  "Load `noteworthy-workspace' and run COMMAND with ARGS, or say it is missing."
+  (let ((stub (symbol-function command)))
+    (if (and (require 'noteworthy-workspace nil t)
+             (not (eq (symbol-function command) stub)))
+        (if args (apply command args) (call-interactively command))
+      (user-error "`%s' is part of noteworthy-workspace, which is not installed"
+                  command))))
+
+(dolist (command '(noteworthy-init noteworthy-quit noteworthy-new-page
+                   noteworthy-refresh-preview noteworthy-typst-send-position
+                   noteworthy-toggle-log noteworthy-preview-start))
+  (unless (fboundp command)
+    (let ((command command))
+      (defalias command
+        (lambda (&rest args)
+          (interactive)
+          (noteworthy--workspace-call command args))
+        "Defined by `noteworthy-workspace'; this stub loads it, or says it is missing."))))
 
 (provide 'noteworthy)
 
