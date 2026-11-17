@@ -23,6 +23,7 @@
 (defvar yas-snippet-dirs)
 (defvar yas-indent-line)
 (defvar yas-buffer-local-condition)
+(defvar noteworthy-latex-mode)
 (declare-function yas-minor-mode "yasnippet" (&optional arg))
 (declare-function lsp-workspaces "lsp-mode" ())
 (declare-function lsp-feature? "lsp-mode" (feature))
@@ -89,8 +90,38 @@ When nil they still expand on TAB like any other snippet."
   :type 'integer
   :group 'noteworthy)
 
-(defconst noteworthy-snippets--identifier-rx "[[:alnum:]_-]"
-  "What can be part of a Typst identifier.
+(defvar-local noteworthy-snippets-context-function #'noteworthy-typst-context
+  "Function returning the syntactic context at point, as a symbol.
+What `noteworthy-snippets-in\=', `noteworthy-snippets-auto\=' and the `:in\='
+of the regex rules are matched against.  Typst buffers use
+`noteworthy-typst-context\='; `noteworthy-latex-mode\=' sets its own.")
+
+(defvar-local noteworthy-snippets-buffer-rules nil
+  "Regex rules for this buffer, or nil to use `noteworthy-snippets-regex-rules\='.
+Set by the modes other than Typst, which have rules of their own.")
+
+(defvar-local noteworthy-snippets-buffer-variables nil
+  "`${NAME}\=' fragments for this buffer, tried before
+`noteworthy-snippets-regex-variables\='.")
+
+(defun noteworthy-snippets-in (&rest contexts)
+  "Return t when `noteworthy-snippets-context-function\=' says point is in CONTEXTS.
+For a snippet\='s `# condition:\=' header, in any mode."
+  (and (memq (funcall noteworthy-snippets-context-function) contexts) t))
+
+(defun noteworthy-snippets-auto (&rest contexts)
+  "Return `auto\=' when point is in one of CONTEXTS, else nil.
+A snippet whose condition returns `auto\=' expands the moment its key is
+typed, even glued to what precedes it."
+  (and (apply #'noteworthy-snippets-in contexts) 'auto))
+
+(defun noteworthy-snippets-auto-word (&rest contexts)
+  "Return `auto-word\=' when point is in one of CONTEXTS, else nil.
+Like `noteworthy-snippets-auto\=', but the key has to start a word."
+  (and (apply #'noteworthy-snippets-in contexts) 'auto-word))
+
+(defvar-local noteworthy-snippets--identifier-rx "[[:alnum:]_-]"
+  "What can be part of an identifier, for a key that must start one.
 
 Deliberately not `\\w\=': word syntax comes from the syntax table, where
 `$\=' counts as a word constituent, so `$sq;\=' would look glued to a word
@@ -526,7 +557,8 @@ the `eta', and it has no capitals."
    "\\${\\([A-Z_]+\\)}"
    (lambda (m)
      (let ((name (substring m 2 -1)))
-       (or (cdr (assoc name noteworthy-snippets-regex-variables))
+       (or (cdr (assoc name noteworthy-snippets-buffer-variables))
+           (cdr (assoc name noteworthy-snippets-regex-variables))
            (progn (message "Noteworthy: unknown snippet variable ${%s}" name) m))))
    trigger t t))
 
@@ -539,10 +571,11 @@ the `eta', and it has no capitals."
 
 (defun noteworthy-snippets--regex-hit ()
   "Return (TEMPLATE START END) for the first regex rule matching at point."
-  (let ((context (noteworthy-typst-context))
+  (let ((context (funcall noteworthy-snippets-context-function))
         ;; `Dx ' is no differential, nor is `DD' -- Typst's double-struck D.
         (case-fold-search nil))
-    (cl-loop for rule in noteworthy-snippets-regex-rules
+    (cl-loop for rule in (or noteworthy-snippets-buffer-rules
+                             noteworthy-snippets-regex-rules)
              when (memq context (plist-get rule :in))
              thereis
              (save-excursion
@@ -644,7 +677,8 @@ Advice after `yas-expand-snippet'."
 Runs from `post-self-insert-hook\='."
   (when (and noteworthy-snippets-auto-expand
              (bound-and-true-p yas-minor-mode)
-             (bound-and-true-p noteworthy-typst-mode))
+             (or (bound-and-true-p noteworthy-typst-mode)
+                 (bound-and-true-p noteworthy-latex-mode)))
     ;; An error here would come back on every keystroke, and in a collab
     ;; session it would land in the middle of a shared buffer.  Report it
     ;; once and let typing continue.
@@ -1204,10 +1238,23 @@ point after for the next command."
                          (< (point) start) (> (point) end)))
             (noteworthy-snippets--consider-word end)))))))
 
+(defun noteworthy-snippets-setup-auto ()
+  "Turn on yasnippet and auto-expansion in the current buffer.
+What every mode that uses the engine needs, Typst or not.  Returns
+non-nil when yasnippet is there."
+  (when (require 'yasnippet nil t)
+    (yas-minor-mode 1)
+    ;; Depth 90 so this runs AFTER smartparens' handler.  Expanding first
+    ;; leaves sp looking at a buffer where our snippet has just inserted a
+    ;; `(', which it then auto-pairs -- `lim;' became `lim_() -> oo)', an
+    ;; unbalanced paren that looked for all the world like a bad snippet.
+    (add-hook 'post-self-insert-hook
+              #'noteworthy-snippets-maybe-auto-expand 90 t)
+    t))
+
 (defun noteworthy-snippets-setup ()
   "Turn on yasnippet for the current Noteworthy buffer."
-  (when (and noteworthy-typst-mode (require 'yasnippet nil t))
-    (yas-minor-mode 1)
+  (when (and noteworthy-typst-mode (noteworthy-snippets-setup-auto))
     ;; typst-ts-mode indents from the tree-sitter parse, and a freshly
     ;; expanded snippet is usually half-written -- an unclosed content
     ;; block parses as an ERROR node and gets flattened to column zero.
@@ -1219,12 +1266,6 @@ point after for the next command."
     ;; `noteworthy-typst-dedent-line\=' matches leading spaces, and a tab
     ;; landing in a shared buffer is churn the bridge has to carry.
     (setq-local indent-tabs-mode nil)
-    ;; Depth 90 so this runs AFTER smartparens' handler.  Expanding first
-    ;; leaves sp looking at a buffer where our snippet has just inserted a
-    ;; `(', which it then auto-pairs -- `lim;' became `lim_() -> oo)', an
-    ;; unbalanced paren that looked for all the world like a bad snippet.
-    (add-hook 'post-self-insert-hook
-              #'noteworthy-snippets-maybe-auto-expand 90 t)
     ;; After the expansions, so a snippet that fires on the same space
     ;; (`dx ' -> `dif x ') has already had its say.
     (add-hook 'post-self-insert-hook

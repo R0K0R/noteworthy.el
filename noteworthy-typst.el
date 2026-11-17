@@ -6,6 +6,11 @@
 (require 'cl-lib)
 (require 'typst-ts-mode)
 
+(defvar noteworthy-snippets-context-function)
+(autoload 'noteworthy-snippets-in "noteworthy-snippets")
+(autoload 'noteworthy-snippets-auto "noteworthy-snippets")
+(autoload 'noteworthy-snippets-auto-word "noteworthy-snippets")
+
 ;; Optional: TAB dispatches to yasnippet when it is installed (see
 ;; `noteworthy-snippets').
 (declare-function yas-expand "yasnippet")
@@ -280,7 +285,8 @@ This is the single source of truth for the pairing gate and for the
   "Return t when point is in one of CONTEXTS, else nil.
 Meant for a snippet\='s `# condition:\=' header, which see in
 `noteworthy-snippets\='."
-  (and (memq (noteworthy-typst-context) contexts) t))
+  (let ((noteworthy-snippets-context-function #'noteworthy-typst-context))
+    (apply #'noteworthy-snippets-in contexts)))
 
 (defun noteworthy-typst-auto (&rest contexts)
   "Return `auto\=' when point is in one of CONTEXTS, else nil.
@@ -293,7 +299,8 @@ The key fires even glued to what precedes it, so `xsr\=' expands just like
 `x sr\='.  That is the right default for postfix operators on a variable,
 and the wrong one for anything spelled like the start of a longer word;
 use `noteworthy-typst-auto-word\=' for those."
-  (and (apply #'noteworthy-typst-in contexts) 'auto))
+  (let ((noteworthy-snippets-context-function #'noteworthy-typst-context))
+    (apply #'noteworthy-snippets-auto contexts)))
 
 (defun noteworthy-typst-auto-word (&rest contexts)
   "Return `auto-word\=' when point is in one of CONTEXTS, else nil.
@@ -301,7 +308,8 @@ use `noteworthy-typst-auto-word\=' for those."
 Like `noteworthy-typst-auto\=', but the key has to start a word -- the `w\='
 option in Obsidian\='s LaTeX Suite.  Without it a key like `sin\=' would fire
 in the middle of `arcsin\='."
-  (and (apply #'noteworthy-typst-in contexts) 'auto-word))
+  (let ((noteworthy-snippets-context-function #'noteworthy-typst-context))
+    (apply #'noteworthy-snippets-auto-word contexts)))
 
 (defun noteworthy-typst-markup-context-p ()
   "Return t if point is in a Markup context.
