@@ -38,6 +38,8 @@ the Typst mode hook below roots typst-preview there.")
   "The reference PDF buffer of the open workspace, or nil.
 What `noteworthy-pdf-scroll' (M-H/J/K/L) scrolls.  Set by the workspace.")
 
+(require 'json)
+(require 'seq)
 (require 'noteworthy-typst)
 (require 'noteworthy-snippets)
 (require 'noteworthy-latex)
@@ -73,8 +75,38 @@ files it depends on changes (`noteworthy--dynamic-inputs-stamp')."
         (puthash root (cons stamp inputs) noteworthy--dynamic-inputs-cache)
         inputs))))
 
+(defun noteworthy-typst-scan-inputs (root)
+  "The typst `--input' arguments of the project at ROOT, scanned from content/.
+What noteworthy.py --print-inputs gives, without running it: chapters are the
+numeric directories of content/ that hold pages, pages their numeric .typ
+files, and page-folders is keyed by the chapter's folder name.  For a project
+without a noteworthy.py, such as a mirror of one on a server.  Nil when
+there are no chapters."
+  (let* ((content (expand-file-name "content" root))
+         (num (lambda (a b) (< (string-to-number a) (string-to-number b))))
+         (ch-dirs (when (file-directory-p content)
+                    (sort (seq-filter
+                           (lambda (d) (and (string-match-p "\\`[0-9]+\\'" d)
+                                            (file-directory-p (expand-file-name d content))))
+                           (directory-files content nil "\\`[^.]"))
+                          num)))
+         ch-folders pg-alist)
+    (dolist (ch ch-dirs)
+      (let ((pages (sort (delq nil (mapcar (lambda (f)
+                                             (when (string-match "\\`\\([0-9]+\\)\\.typ\\'" f)
+                                               (match-string 1 f)))
+                                           (directory-files (expand-file-name ch content))))
+                         num)))
+        (when pages
+          (push ch ch-folders)
+          (push (cons ch (vconcat pages)) pg-alist))))
+    (when ch-folders
+      (list "--input" (format "chapter-folders=%s" (json-encode (vconcat (nreverse ch-folders))))
+            "--input" (format "page-folders=%s" (json-encode (nreverse pg-alist)))))))
+
 (defun noteworthy--run-dynamic-inputs (root)
-  "Run noteworthy.py --print-inputs in ROOT using a temp wrapper script."
+  "Run noteworthy.py --print-inputs in ROOT using a temp wrapper script.
+Without a noteworthy.py there, scan content/ (`noteworthy-typst-scan-inputs')."
   (let ((script (expand-file-name "noteworthy.py" root)))
     (if (file-exists-p script)
         (let* ((default-directory root)
@@ -97,7 +129,7 @@ files it depends on changes (`noteworthy--dynamic-inputs-stamp')."
           (if (not (string-empty-p output))
               (split-string output "\n" t)
             nil))
-      nil)))
+      (ignore-errors (noteworthy-typst-scan-inputs root)))))
 
 (add-hook 'typst-ts-mode-hook
           (lambda ()
