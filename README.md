@@ -2,7 +2,7 @@
 
 An Emacs editing environment for the [Noteworthy](https://github.com/sihooleebd/noteworthy) academic framework for [Typst](https://typst.app/).
 
-This package provides smart editing features, automated workspace layout, and seamless preview integration tailored for developing Noteworthy projects — a powerful Typst framework for creating educational textbooks, lecture notes, and technical documentation.
+This package provides the Typst editing layer -- smart editing, snippets, Evil bindings, clipboard images, and the same typing layer for AUCTeX -- tailored for developing Noteworthy projects — a powerful Typst framework for creating educational textbooks, lecture notes, and technical documentation.
 
 ## Features
 
@@ -11,17 +11,9 @@ This package provides smart editing features, automated workspace layout, and se
   - Smart newline with list continuation and bracket expansion
   - Intelligent backspace that deletes matching pairs
 
-- **Workspace Layout** (`noteworthy-init`)
-  - Treemacs file explorer (left)
-  - Main editor (center-top, 75%)
-  - Terminal (center-bottom, 25%)
-  - Live preview via xwidget (right) — falls back to external browser if unavailable
-  - Optional PDF reference window
-
-- **Preview Integration**
-  - Automatic xwidget detection
-  - Jump-to-source from preview (`M-o`)
-  - Remote PDF scrolling (`M-H/J/K/L`)
+- **Jump-to-source and PDF scrolling** (`M-o`, `M-H/J/K/L`) -- these act on the
+  preview and PDF panes that [noteworthy-workspace](../noteworthy-workspace)
+  opens, and are inert without it.
 
 - **Evil Support** (Optional)
   - Vim-style `o`/`O` with list continuation
@@ -31,63 +23,28 @@ This package provides smart editing features, automated workspace layout, and se
 
 - Emacs 29.1+ (with Tree-sitter support)
 - [typst-ts-mode](https://codeberg.org/meow_king/typst-ts-mode)
-- [typst-preview](https://github.com/havarddj/typst-preview.el)
-- [treemacs](https://github.com/Alexander-Miller/treemacs)
-- [pdf-tools](https://github.com/vedang/pdf-tools)
 - [tinymist](https://github.com/Myriad-Dreamin/tinymist) (LSP server for Typst)
+- For opening a project (window layout, preview, pages, quitting, server
+  projects): [noteworthy-workspace](../noteworthy-workspace), which needs
+  [emacs-collab](../emacs-collab.el), treemacs, pdf-tools, vterm and
+  [typst-preview](https://github.com/havarddj/typst-preview.el).
 
 ## Installation
 
-### Using straight.el
-
 ```elisp
-(straight-use-package
- '(noteworthy :type git :host github :repo "YOUR_USERNAME/noteworthy"))
-
+(add-to-list 'load-path "~/.emacs.d/site-lisp/noteworthy")
 (require 'noteworthy)
 ```
 
-### Using use-package with straight
-
-```elisp
-(use-package noteworthy
-  :straight (:type git :host github :repo "YOUR_USERNAME/noteworthy")
-  :config
-  (setq noteworthy-terminal-shell "/usr/bin/fish")) ;; Optional
-```
-
-### Manual Installation
-
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/R0K0R/noteworthy.git ~/.emacs.d/site-lisp/noteworthy
-   ```
-
-2. Add to your `init.el`:
-   ```elisp
-   (add-to-list 'load-path "~/.emacs.d/site-lisp/noteworthy")
-   (require 'noteworthy)
-   ```
-
 ## Usage
 
-### Start a Noteworthy Session
+Editing needs nothing else: open a `.typ` file and `noteworthy-typst-mode` starts.
 
-```elisp
-M-x noteworthy-init
-```
-
-Or from command line:
-```bash
-emacs --noteworthy-path /path/to/project --pdf-path /path/to/reference.pdf
-```
-
-### Configuration
-
-```elisp
-;; Custom shell for the terminal pane (default: bash)
-(setq noteworthy-terminal-shell "/usr/bin/fish")
-```
+The commands that open or close a project -- `noteworthy-init`,
+`noteworthy-quit`, `noteworthy-new-page` (`M-t n`), `noteworthy-refresh-preview`
+(`M-t r`), `noteworthy-toggle-log`, `noteworthy-typst-send-position` (`M-o`) --
+live in `noteworthy-workspace`. If it is installed they load it on first use;
+if not, they say it is missing.
 
 ## Keybindings
 
@@ -132,8 +89,7 @@ emacs --noteworthy-path /path/to/project --pdf-path /path/to/reference.pdf
 noteworthy/
 ├── noteworthy.el          # Main entry point
 ├── noteworthy-typst.el    # Smart editing logic
-├── noteworthy-layout.el   # Workspace management
-├── noteworthy-preview.el  # Preview abstraction
+├── noteworthy-image.el    # Clipboard image paste
 ├── noteworthy-evil.el     # Evil integration (optional)
 ├── noteworthy-snippets.el # yasnippet integration (the auto-expansion engine)
 ├── noteworthy-latex.el    # The same typing layer for AUCTeX LaTeX-mode
