@@ -201,6 +201,96 @@ Sets up treemacs, editor, terminal, preview, and PDF windows."
 
       (message "Noteworthy initialized: %s" dir))))
 
+;;; Quitting
+
+(defvar xwidget-webkit-mode)
+(declare-function get-buffer-xwidgets "xwidget.c" (buffer))
+(declare-function set-xwidget-query-on-exit-flag "xwidget.c" (xwidget flag))
+(declare-function lsp-workspaces "lsp-mode")
+(declare-function lsp--session-workspaces "lsp-mode")
+(declare-function lsp-session "lsp-mode")
+(declare-function lsp--workspace-root "lsp-mode")
+(declare-function lsp-workspace-shutdown "lsp-mode")
+(declare-function noteworthy-pages--stop-preview "noteworthy-pages")
+(declare-function noteworthy-collab-connected-p "noteworthy-collab")
+(declare-function noteworthy-collab-disconnect "noteworthy-collab")
+(declare-function +doom-dashboard/open "doom-dashboard")
+
+(defun noteworthy--under-root-p (file root)
+  "Whether FILE is ROOT or inside it."
+  (and file (file-in-directory-p file root)))
+
+(defun noteworthy--quit-terminal (buf)
+  "Kill the terminal BUF, asking only if a command is running in it.
+An idle shell is just a prompt; Emacs would ask about it anyway."
+  (let ((proc (get-buffer-process buf)))
+    (when (and proc (not (process-running-child-p proc)))
+      (set-process-query-on-exit-flag proc nil))
+    (kill-buffer buf)))
+
+;;;###autoload
+(defun noteworthy-quit ()
+  "Close the Noteworthy workspace and everything it started.
+Offers to save the project's modified files first; a file left unsaved
+is asked about again rather than killed.  Then stops the preview server
+(`tinymist preview') and kills its xwidget, shuts down this project's
+tinymist language server -- another project's keeps running -- kills the
+project's buffers, the PDF and the terminal (asking only if a command is
+running in it), disconnects collaboration, closes Treemacs and returns
+to the dashboard."
+  (interactive)
+  (let ((root (or (bound-and-true-p noteworthy-project-root)
+                  (default-value 'noteworthy-project-root)
+                  (when-let* ((d (locate-dominating-file
+                                  (or buffer-file-name default-directory) "noteworthy.py")))
+                    (expand-file-name d)))))
+    (unless root (user-error "No Noteworthy project is open"))
+    (setq root (file-name-as-directory (expand-file-name root)))
+    ;; 1. Save first, so nothing below has to decide about unsaved work.
+    (save-some-buffers nil (lambda () (noteworthy--under-root-p buffer-file-name root)))
+    ;; 2. The preview: its server, then the xwidget showing it.
+    (when (fboundp 'noteworthy-pages--stop-preview)
+      (noteworthy-pages--stop-preview))
+    (when-let* ((ws (get-buffer "*ws-typst-server*")))
+      (when-let* ((p (get-buffer-process ws))) (set-process-query-on-exit-flag p nil))
+      (kill-buffer ws))
+    (dolist (b (buffer-list))
+      (when (eq (buffer-local-value 'major-mode b) 'xwidget-webkit-mode)
+        (when (fboundp 'get-buffer-xwidgets)
+          (dolist (xw (get-buffer-xwidgets b))
+            (set-xwidget-query-on-exit-flag xw nil)))
+        (kill-buffer b)))
+    ;; 3. This project's language server.
+    (when (featurep 'lsp-mode)
+      (dolist (ws (ignore-errors (lsp--session-workspaces (lsp-session))))
+        (when (equal (file-name-as-directory (expand-file-name (lsp--workspace-root ws))) root)
+          (ignore-errors (lsp-workspace-shutdown ws)))))
+    ;; 4. Collaboration, before its buffers go.
+    (when (and (fboundp 'noteworthy-collab-connected-p) (noteworthy-collab-connected-p))
+      (noteworthy-collab-disconnect))
+    ;; 5. The project's buffers, the PDF and the terminal.
+    (when (buffer-live-p (bound-and-true-p noteworthy-pdf-buffer))
+      (kill-buffer noteworthy-pdf-buffer))
+    (dolist (b (buffer-list))
+      (when (buffer-live-p b)
+        (with-current-buffer b
+          (cond ((noteworthy--under-root-p buffer-file-name root) (kill-buffer b))
+                ((and (memq major-mode '(vterm-mode term-mode eshell-mode dired-mode))
+                      (noteworthy--under-root-p default-directory root))
+                 (if (eq major-mode 'dired-mode) (kill-buffer b)
+                   (noteworthy--quit-terminal b)))))))
+    ;; 6. The layout.
+    (when-let* ((w (and (fboundp 'treemacs-get-local-window) (treemacs-get-local-window))))
+      (delete-window w))
+    (setq-default noteworthy-project-root nil
+                  noteworthy-master-file nil)
+    (setq noteworthy-pdf-buffer nil)
+    (ignore-errors (delete-other-windows))
+    (if (fboundp '+doom-dashboard/open)
+        (+doom-dashboard/open (selected-frame))
+      (switch-to-buffer (get-scratch-buffer-create)))
+    (message "Noteworthy closed: %s" (abbreviate-file-name root))))
+
 (defvar noteworthy-preview-width nil
   "Width of the preview window in columns.
 If nil, defaults to 35% of the frame width.")

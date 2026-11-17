@@ -178,6 +178,8 @@
       ;; A new page (hierarchy entry, file, preview), and the preview alone
       (kbd "M-t n") #'noteworthy-new-page
       (kbd "M-t r") #'noteworthy-refresh-preview
+      ;; Close the workspace: preview, xwidget, tinymist, buffers
+      (kbd "M-t q") #'noteworthy-quit
       ;; The parameters of the call at point, on request: they no longer
       ;; pop up on every `(' (see the Doom module).
       (kbd "M-t s") #'lsp-signature-activate)))
