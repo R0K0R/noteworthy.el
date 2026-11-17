@@ -227,29 +227,51 @@ in a terminal, and a search for one mode missed the other.")
             ('left  (image-backward-hscroll 20))
             ('right (image-forward-hscroll 20))))))))))
 
-;;; Wrapping a selection: `S c' cancels it
+;;; Wrapping a selection: `S x' cancels it
 
 ;; LaTeX Suite's visual snippets wrap the selection in what one key names.
 ;; In evil's visual state a bare letter is a command, so the key comes
 ;; after evil-surround's `S' -- or `ys' and a motion from normal state:
-;; `ysiwc' cancels the word at point.
+;; `ysiwx' cancels the word at point.
 
 (defcustom noteworthy-evil-surround-pairs
-  '((?c . ("cancel(" . ")"))
+  '((?c . evil-surround-function)
+    (?x . ("cancel(" . ")"))
+    (?. . ("dot(" . ")"))
     (?o . ("overline(" . ")"))
     (?u . ("underline(" . ")"))
     (?O . ("overbrace(" . ")"))
     (?U . ("underbrace(" . ")"))
     (?h . ("hat(" . ")"))
     (?v . ("arrow(" . ")"))
-    (?d . ("dot(" . ")"))
     (?~ . ("tilde(" . ")"))
     (?r . ("sqrt(" . ")"))
     (?a . ("abs(" . ")"))
     (?n . ("norm(" . ")")))
-  "evil-surround pairs added in Noteworthy buffers, ahead of the defaults.
-`f' still asks for any function name, and a character not listed wraps
-in itself: `S $', `S *', `S _'."
+  "evil-surround pairs added in Noteworthy Typst buffers, ahead of the defaults.
+`c' asks for a function name -- the same key evil-tex gives LaTeX for a
+command -- and `f' still does too.  A character not listed wraps in
+itself: `S $', `S *', `S _'."
+  :type '(alist :key-type character :value-type (choice (cons string string) function))
+  :group 'noteworthy)
+
+(defcustom noteworthy-evil-latex-surround-pairs
+  '((?x . ("\\cancel{" . "}"))
+    (?. . ("\\dot{" . "}"))
+    (?o . ("\\overline{" . "}"))
+    (?u . ("\\underline{" . "}"))
+    (?O . ("\\overbrace{" . "}"))
+    (?U . ("\\underbrace{" . "}"))
+    (?h . ("\\hat{" . "}"))
+    (?v . ("\\vec{" . "}"))
+    (?~ . ("\\tilde{" . "}"))
+    (?r . ("\\sqrt{" . "}"))
+    (?a . ("\\left|" . "\\right|"))
+    (?n . ("\\left\\|" . "\\right\\|")))
+  "evil-surround pairs added in Noteworthy LaTeX buffers.
+Alongside evil-tex's own -- `c' a command, `d' a delimiter, `e' an
+environment, `m' and `M' math, `;' an accent, `q' `Q' quotes, `^' `_'
+`T' -- which they leave alone."
   :type '(alist :key-type character :value-type (cons string string))
   :group 'noteworthy)
 
@@ -260,7 +282,15 @@ in itself: `S $', `S *', `S _'."
                 (append noteworthy-evil-surround-pairs
                         (default-value 'evil-surround-pairs-alist)))))
 
+(defun noteworthy-evil--latex-surround-pairs-h ()
+  "Add `noteworthy-evil-latex-surround-pairs' to this buffer's own."
+  (when (require 'evil-surround nil t)
+    (setq-local evil-surround-pairs-alist
+                (append noteworthy-evil-latex-surround-pairs
+                        evil-surround-pairs-alist))))
+
 (add-hook 'noteworthy-typst-mode-hook #'noteworthy-evil--surround-pairs-h)
+(add-hook 'noteworthy-latex-mode-hook #'noteworthy-evil--latex-surround-pairs-h)
 
 (noteworthy-evil-setup)
 
