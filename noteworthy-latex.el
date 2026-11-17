@@ -36,6 +36,7 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'seq)
 (require 'noteworthy-snippets)
 
 (defvar noteworthy-latex-mode)
@@ -50,6 +51,17 @@
 (declare-function yas-exit-all-snippets "yasnippet" ())
 (declare-function yas--template-content "yasnippet" (template))
 (declare-function evil-define-key* "evil-core" (state keymap key def &rest bindings))
+(declare-function TeX-master-file "tex" (&optional extension nondirectory ask))
+(declare-function TeX-master-output-file "tex" (extension))
+(declare-function TeX-view "tex" ())
+(declare-function pdf-info-synctex-forward-search "pdf-info" (source &optional line column file-or-buffer))
+(declare-function pdf-sync-synctex-file-name "pdf-sync" (filename pdffile))
+(declare-function pdf-view-goto-page "pdf-view" (page &optional window))
+(declare-function pdf-view-image-size "pdf-view" (&optional displayed-p window page))
+(declare-function pdf-util-tooltip-arrow "pdf-util" (image-top &optional timeout))
+(declare-function emacs-collab-layout--current-project "emacs-collab-layout" ())
+(declare-function emacs-collab-layout-project-pdf-file "emacs-collab-layout" (project))
+(declare-function emacs-collab-layout-show-pdf "emacs-collab-layout" (&optional file root))
 
 (defgroup noteworthy-latex nil
   "Noteworthy typing layer for LaTeX."
@@ -569,6 +581,73 @@ expansions and the guard: a word a rule has taken is no word any more."
       (error (message "Noteworthy: adding backslashes failed: %s"
                       (error-message-string err))))))
 
+;;; Jumping to the PDF (M-o)
+
+(defun noteworthy-latex--pdf-file ()
+  "The PDF built from this buffer's master file, or nil if none exists.
+Prefers a PDF on screen, then a collab layout's PDF, then AUCTeX's output
+file (which honours `TeX-output-dir'), then the master's own name."
+  (let ((cands
+         (delq nil
+               (append
+                (mapcar (lambda (w)
+                          (with-current-buffer (window-buffer w)
+                            (and (derived-mode-p 'pdf-view-mode 'doc-view-mode)
+                                 buffer-file-name)))
+                        (window-list nil 'no-minibuf))
+                (list
+                 (and (fboundp 'emacs-collab-layout--current-project)
+                      (ignore-errors
+                        (when-let* ((p (emacs-collab-layout--current-project)))
+                          (emacs-collab-layout-project-pdf-file p))))
+                 (and (fboundp 'TeX-master-output-file)
+                      (ignore-errors (expand-file-name (TeX-master-output-file "pdf"))))
+                 (and (fboundp 'TeX-master-file)
+                      (ignore-errors (expand-file-name (TeX-master-file "pdf"))))))))
+        (master (and (fboundp 'TeX-master-file)
+                     (ignore-errors (file-name-base (TeX-master-file))))))
+    ;; An on-screen PDF counts only if it is this document's.
+    (seq-find (lambda (f)
+                (and (file-regular-p f)
+                     (or (null master) (equal (file-name-base f) master))))
+              cands)))
+
+(defun noteworthy-latex-send-position ()
+  "Show the place in the PDF that matches point (a SyncTeX forward search).
+The LaTeX twin of `noteworthy-typst-send-position'.  Needs a PDF built with
+SyncTeX (latexmk -synctex=1, as `TeX-source-correlate-mode' does); without
+pdf-tools it falls back to `TeX-view'."
+  (interactive)
+  (let ((pdf (noteworthy-latex--pdf-file)))
+    (cond
+     ((null pdf)
+      (user-error "No PDF yet: compile first"))
+     ((not (require 'pdf-sync nil t))
+      (TeX-view))
+     (t
+      (let* ((line (line-number-at-pos nil t))
+             (col (current-column))
+             (src (or (pdf-sync-synctex-file-name buffer-file-name pdf)
+                      buffer-file-name))
+             (hit (condition-case err
+                      (pdf-info-synctex-forward-search src line col pdf)
+                    (error (user-error "SyncTeX: %s (built with -synctex=1?)"
+                                       (error-message-string err)))))
+             (page (alist-get 'page hit))
+             (y (nth 1 (alist-get 'edges hit)))
+             (buf (or (find-buffer-visiting pdf)
+                      (and (fboundp 'emacs-collab-layout-show-pdf)
+                           (ignore-errors (emacs-collab-layout-show-pdf pdf)))
+                      (find-file-noselect pdf)))
+             (win (or (get-buffer-window buf)
+                      (display-buffer buf '(nil (inhibit-same-window . t))))))
+        (when (and page (window-live-p win))
+          (with-selected-window win
+            (pdf-view-goto-page page win)
+            (when y
+              (pdf-util-tooltip-arrow
+               (round (* y (cdr (pdf-view-image-size)))))))))))))
+
 ;;; The mode
 
 (defvar noteworthy-latex-mode-map (make-sparse-keymap)
@@ -584,10 +663,15 @@ Evil binds TAB in its insert state map, which shadows
    ((noteworthy-typst--snippet-active-p) (yas-next-field))
    (t (call-interactively #'indent-for-tab-command))))
 
+(define-key noteworthy-latex-mode-map (kbd "M-o") #'noteworthy-latex-send-position)
+
 (with-eval-after-load 'evil
   (evil-define-key* 'insert noteworthy-latex-mode-map
                     (kbd "TAB") #'noteworthy-latex-tab
-                    (kbd "<tab>") #'noteworthy-latex-tab))
+                    (kbd "<tab>") #'noteworthy-latex-tab
+                    (kbd "M-o") #'noteworthy-latex-send-position)
+  (evil-define-key* 'normal noteworthy-latex-mode-map
+                    (kbd "M-o") #'noteworthy-latex-send-position))
 
 (defun noteworthy-latex--enable ()
   "Wire the typing layer into this buffer."
