@@ -846,6 +846,22 @@ and always `noteworthy-snippets--math-names\='."
            (gethash piece noteworthy-snippets--scope-names)
            (not (member piece noteworthy-snippets--never-pieces)))))
 
+(defun noteworthy-snippets--cuts-key-p (word pieces)
+  "Non-nil when splitting WORD into PIECES cuts a snippet key in half.
+`int' -- what taking back `integral' leaves, or typed on purpose -- must
+never become `in t', wherever it is in the word (`Aint' is `A int')."
+  (let ((cuts (let ((pos 0) out)
+                (dolist (p (butlast pieces) out)
+                  (push (setq pos (+ pos (length p))) out)))))
+    (cl-some (lambda (key)
+               (let ((start 0) hit)
+                 (while (and (not hit) (setq start (string-search key word start)))
+                   (let ((end (+ start (length key))))
+                     (setq hit (cl-some (lambda (c) (and (> c start) (< c end))) cuts)
+                           start (1+ start))))
+                 hit))
+             (mapcar #'cdr noteworthy-snippets--word-keys))))
+
 (defun noteworthy-snippets--split-word (word &optional unknown)
   "WORD split into known names and single letters, or nil.
 Splits only a word that is not itself a known name or a name in Typst's
@@ -888,6 +904,9 @@ differential: `dtheta' is for `d@q'."
                (and unknown
                     (not (noteworthy-snippets--near-name-p word))))
              (not (equal (car pieces) "d"))
+             ;; Never cut a snippet key in half: `int' (what taking back
+             ;; `integral' leaves, or typed on purpose) is not `in t'.
+             (not (noteworthy-snippets--cuts-key-p word pieces))
              pieces)))))
 
 (defun noteworthy-snippets--letter-run-p (pieces n)
