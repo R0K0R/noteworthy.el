@@ -745,6 +745,16 @@ See `noteworthy-snippets-maybe-space-word'."
   :type 'boolean
   :group 'noteworthy)
 
+(defcustom noteworthy-snippets-split-scripts t
+  "Whether a script written the LaTeX way is split: `k_BT' -> `k_B T'.
+Typst takes all of `BT' as the subscript; LaTeX only `B'.  Scripts that
+are known names (`v_max', `x_theta') are left alone."
+  :type 'boolean
+  :group 'noteworthy)
+
+(defun noteworthy-snippets-script-split-p ()
+  (and noteworthy-snippets-auto-space noteworthy-snippets-split-scripts))
+
 (defconst noteworthy-snippets--math-names
   (append
    ;; Typst's math operators
@@ -1089,12 +1099,70 @@ and the word goes back as it was typed."
     (unless entry (user-error "No split on this line"))
     (noteworthy-snippets--unsplit entry)))
 
+(defun noteworthy-snippets--known-word-p (word)
+  "Non-nil when WORD is a name Typst math knows here."
+  (or (member word noteworthy-snippets--math-names)
+      (member word noteworthy-snippets--typst-math-scope)
+      (and noteworthy-snippets--scope-names
+           (gethash word noteworthy-snippets--scope-names))
+      (noteworthy-snippets--defined-name-p word)))
+
+(defun noteworthy-snippets--script-word-before (end)
+  "Bounds (START . END) of a letters-only script word ending at END, or nil.
+Two or more letters right after `_' or `^' in math, as the `BT' of `k_BT'."
+  (save-excursion
+    (goto-char end)
+    (skip-chars-backward "[:alpha:]")
+    (let ((start (point)))
+      (and (>= (- end start) 2)
+           (memq (char-before start) '(?_ ?^))
+           (progn (goto-char end) (eq (noteworthy-typst-context) 'math))
+           (cons start end)))))
+
+(defun noteworthy-snippets--consider-script-word (end)
+  "Split the script word ending at END the way LaTeX reads it.
+In Typst `k_BT' is k with the subscript `BT', an unknown name; written
+the LaTeX way it means k_B times T.  A script word that is a known name
+\(`_max', `_theta') stays; otherwise its first name or letter keeps the
+script and the rest becomes a word of its own -- `k_B T', `x_theta y' --
+which is then split like any other word.  An all-lowercase script that
+starts with no name (`a_ij', `E_kin') is a label and stays as typed.
+Returns non-nil when it split."
+  (when-let* ((bounds (noteworthy-snippets--script-word-before end)))
+    (let ((word (buffer-substring-no-properties (car bounds) (cdr bounds))))
+      (unless (noteworthy-snippets--known-word-p word)
+        (let ((head (or (cl-loop for len from (1- (length word)) downto 2
+                                 for piece = (substring word 0 len)
+                                 when (noteworthy-snippets--name-piece-p piece)
+                                 return piece)
+                        (substring word 0 1))))
+          (let ((rest (substring word (length head))))
+            ;; Only when the rest stands on its own -- a letter, a name, or
+            ;; names run together.
+            ;; A single-letter head only from a script with a capital in it:
+            ;; an all-lowercase one (`ij', `kin', `rel') is a label meant
+            ;; whole, as `a_(ij)' or `E_"kin"', which splitting would hide.
+            (when (and (or (> (length head) 1)
+                           (let ((case-fold-search nil))
+                             (string-match-p "[[:upper:]]" word)))
+                       (or (= (length rest) 1)
+                           (noteworthy-snippets--known-word-p rest)
+                           (noteworthy-snippets--split-word rest)))
+              (noteworthy-snippets--replace-word
+               (car bounds) (cdr bounds) (list head rest))
+              ;; The rest, now a word of its own, one character further on.
+              (noteworthy-snippets--consider-word (1+ end))
+              t)))))))
+
 (defun noteworthy-snippets--consider-word (end)
   "Split the math word ending at END if it is no name in scope.
 With the language server's names, any word that is not one of them is
 split -- `xy' too, which is two variables.  Without them, only words that
-split into known names and are not bound by a `let' in this file."
-  (when-let* ((bounds (noteworthy-snippets--math-word-before end)))
+split into known names and are not bound by a `let' in this file.  A word
+right after `_' or `^' is split as a script instead (`k_BT' -> `k_B T')."
+  (when-let* (((not (and (noteworthy-snippets-script-split-p)
+                         (noteworthy-snippets--consider-script-word end))))
+              (bounds (noteworthy-snippets--math-word-before end)))
     (let ((word (buffer-substring-no-properties (car bounds) (cdr bounds))))
       (cond
        ((member word noteworthy-snippets--typst-math-scope))
